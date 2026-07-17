@@ -16,9 +16,11 @@ echo "  -- authoritative HUD income limits via HUD USER API (LIVE federal API, g
 IL_OUT="$(call "$REV" "$T_IL" '{"entityid":"0603799999","household_size":4}')"
 check "housing_specialist lookup_income_limit" ALLOW "$IL_OUT"
 if echo "$IL_OUT" | grep -q '"found": *true' && echo "$IL_OUT" | grep -qi 'HUD'; then echo "  PASS | lookup_income_limit returned AUTHORITATIVE HUD limits + provenance"; pass=$((pass+1)); else echo "  WARN | lookup_income_limit -> $IL_OUT (needs HUD_API_TOKEN for the live call; using fallback limits below)"; fi
-IL50_VAL="$(printf '%s' "$IL_OUT" | grep -oE '"il50": *[0-9]+' | grep -oE '[0-9]+' | head -1)"
-IL30_VAL="$(printf '%s' "$IL_OUT" | grep -oE '"il30": *[0-9]+' | grep -oE '[0-9]+' | head -1)"
-IL80_VAL="$(printf '%s' "$IL_OUT" | grep -oE '"il80": *[0-9]+' | grep -oE '[0-9]+' | head -1)"
+# extract the value AFTER the colon (the key names il30/il50/il80 contain digits, so a bare [0-9]+
+# would match the key; sed captures only the number that follows the key).
+IL50_VAL="$(printf '%s' "$IL_OUT" | sed -nE 's/.*"il50":[[:space:]]*([0-9]+).*/\1/p' | head -1)"
+IL30_VAL="$(printf '%s' "$IL_OUT" | sed -nE 's/.*"il30":[[:space:]]*([0-9]+).*/\1/p' | head -1)"
+IL80_VAL="$(printf '%s' "$IL_OUT" | sed -nE 's/.*"il80":[[:space:]]*([0-9]+).*/\1/p' | head -1)"
 [ -z "$IL30_VAL" ] && IL30_VAL=30000
 [ -z "$IL50_VAL" ] && IL50_VAL=50000
 [ -z "$IL80_VAL" ] && IL80_VAL=80000
