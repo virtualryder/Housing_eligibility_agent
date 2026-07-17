@@ -1,0 +1,209 @@
+# housing-assistance/manifest.yaml
+# SLG use case #2: a governed Housing Choice Voucher (Section 8) / public-housing eligibility &
+# determination agent, built on the SAME governed-hero-agent pattern as the pharmacovigilance,
+# benefits, and financial-aid agents. The agent intakes, looks up the AUTHORITATIVE HUD income limit
+# for the household's county, de-identifies, screens against Area Median Income, and drafts; a housing
+# specialist makes and commits the eligibility determination at the human sign-off gate. render.py turns
+# this manifest into the deploy inputs.
+
+agent:
+  slug: housing-assistance
+  title: Housing Choice Voucher and Public Housing Eligibility
+  industry: SLG
+  region: us-east-1
+  prefix: hou
+
+identity:                          # stable, long-lived (own lifecycle)
+  pool_name: hou-housing
+  client_name: hou-gw
+  reviewer_group: housing_specialist
+  users:                           # placeholder passwords — override via env / rotate before shared use
+    - { name: housing_specialist, password: "ChangeMe-Reviewer1!", in_group: true }
+    - { name: approver,           password: "ChangeMe-Approver1!", in_group: true }
+    - { name: outsider,           password: "ChangeMe-Outsider1!", in_group: false }
+
+engine:
+  name: hou_housing_authz
+  description: Deny-by-default Cedar authz for the Housing Choice Voucher eligibility agent
+
+gateway:
+  name: hou-housing-gw
+  description: Housing-assistance governed tool gateway
+  ssm_discovery_param: /hou-housing/gateway-url
+
+guardrail:
+  name: hou-housing-guardrail
+  description: "Fail-closed output control for eligibility notices: PII anonymize + prompt-attack"
+  pii_anonymize: [NAME, AGE, EMAIL, PHONE, US_SOCIAL_SECURITY_NUMBER, ADDRESS]
+  prompt_attack: HIGH
+
+controls:
+  fail_closed_masking: true
+  worm_audit: true
+  human_signoff_gate: true
+
+audit:
+  object_lock_mode: GOVERNANCE
+  retention_days: 1
+
+model:
+  draft_model_id: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+
+runtime:
+  name: housing_runtime_agent
+
+tools:
+  - target: intake-application
+    lambda: hou-intake-application
+    handler: intake_application.py
+    kind: domain
+    mcp_tools:
+      - name: intake_application
+        description: "Extract the non-PII decision fields (household size, annual household income, county FIPS/entityid, and elderly/disabled flags) from a raw Housing Choice Voucher / public-housing application."
+        input: { application: { type: string, description: "Raw housing application text or JSON." } }
+        required: [application]
+
+  - target: lookup-income-limit
+    lambda: hou-lookup-income-limit
+    handler: lookup_income_limit.py
+    kind: domain
+    mcp_tools:
+      - name: lookup_income_limit
+        description: "Fetch the AUTHORITATIVE HUD income limits (30% / 50% / 80% of Area Median Income) for the household's county from the HUD USER Income Limits API. The county FIPS/entityid is non-PII, so run this before mask_pii; pass the returned limits and il_source to assess_housing_eligibility."
+        input:
+          entityid: { type: string, description: "HUD entityid = county FIPS code, 10 chars 'SSCCC99999' (e.g. Los Angeles County CA = 0603799999)." }
+          household_size: { type: integer, description: "Household size 1-8 (selects the il*_pN column)." }
+          year: { type: string, description: "Income-limit year (optional; defaults to the latest published)." }
+        required: [entityid]
+
+  - target: mask-pii
+    lambda: hou-mask-pii
+    handler: mask_pii.py
+    kind: control
+    mcp_tools:
+      - name: mask_pii
+        description: "Fail-closed PII de-identification of a housing applicant record (name, SSN, address, DOB, etc.); sets deidentified=true only if masking succeeded."
+        input: { case: { type: string, description: "Housing applicant record text that may contain PII." } }
+        required: [case]
+
+  - target: assess-eligibility
+    lambda: hou-assess-eligibility
+    handler: assess_housing_eligibility.py
+    kind: domain
+    mcp_tools:
+      - name: assess_housing_eligibility
+        description: "Deterministic Housing Choice Voucher income-eligibility determination (income category vs Area Median Income + extremely-low-income targeting) on de-identified decision fields; case must be masked first (deidentified true)."
+        input:
+          annual_income: { type: number, description: "Total annual household income." }
+          household_size: { type: integer, description: "Household size (1-8)." }
+          il30: { type: number, description: "HUD extremely-low (30% AMI) limit for this household size, from lookup_income_limit." }
+          il50: { type: number, description: "HUD very-low (50% AMI) limit for this household size, from lookup_income_limit." }
+          il80: { type: number, description: "HUD low (80% AMI) limit for this household size, from lookup_income_limit." }
+          il_source: { type: string, description: "Provenance of the income limits (e.g. from lookup_income_limit), echoed into the determination for the audit trail." }
+          deidentified: { type: boolean, description: "True if masked by mask_pii." }
+        required: [deidentified]
+
+  - target: recertify
+    lambda: hou-recertify
+    handler: recertify.py
+    kind: domain
+    mcp_tools:
+      - name: recertify
+        description: "Annual/interim RE-CERTIFICATION: re-run the income-eligibility rules on new facts and classify the change. An ADVERSE change (subsidy reduction or termination) triggers due-process advance-notice and informal-hearing rights BEFORE it takes effect. Never commits. Operates on de-identified data (deidentified true)."
+        input:
+          annual_income: { type: number, description: "New total annual household income." }
+          household_size: { type: integer, description: "Household size (1-8)." }
+          il50: { type: number, description: "HUD very-low (50% AMI) limit for this household size." }
+          il80: { type: number, description: "HUD low (80% AMI) limit for this household size." }
+          prior_eligible: { type: boolean, description: "The prior determination's eligibility (or supply prior_determination)." }
+          prior_determination: { type: string, description: "Prior determination string (ELIGIBLE/INELIGIBLE) if prior_eligible not given." }
+          deidentified: { type: boolean, description: "True if masked by mask_pii." }
+        required: [deidentified]
+
+  - target: detect-overpayment
+    lambda: hou-detect-overpayment
+    handler: overpayment.py
+    kind: domain
+    mcp_tools:
+      - name: detect_overpayment
+        description: "Deterministic housing-assistance overpayment calculation: subsidy actually paid vs subsidy that should have been paid under corrected income, over N months. Identifies the overpayment; recovery/referral is a human decision. De-identified data only."
+        input:
+          prior_monthly_subsidy: { type: number, description: "Monthly housing-assistance payment actually made." }
+          corrected_monthly_subsidy: { type: number, description: "Monthly subsidy that should have been paid under corrected facts." }
+          months: { type: integer, description: "Number of months the error persisted." }
+          deidentified: { type: boolean, description: "True if masked by mask_pii." }
+        required: [deidentified]
+
+  - target: hou-core
+    lambda: hou-core-tools
+    handler: housing_core.py
+    kind: domain
+    guardrailed: true
+    mcp_tools:
+      - name: draft_notice
+        description: "Draft a de-identified housing-eligibility determination notice; case must be masked first."
+        input:
+          case: { type: string, description: "De-identified case + eligibility determination JSON/text." }
+          deidentified: { type: boolean, description: "True if masked by mask_pii." }
+        required: [case, deidentified]
+      - name: finalize_determination
+        description: "Commit a housing-eligibility determination; agent must never call this directly."
+        input: { case_id: { type: string, description: "Case/record id." } }
+        required: [case_id]
+      - name: refer_fraud
+        description: "Refer a case as suspected fraud; a human-only decision — the agent must never call this."
+        input: { fraud_case_id: { type: string, description: "Case id to refer." } }
+        required: [fraud_case_id]
+
+  - target: write-audit
+    lambda: hou-write-audit
+    handler: write_audit.py
+    kind: control
+    mcp_tools:
+      - name: write_audit
+        description: "Append a tamper-evident audit record (append-only ledger + WORM copy); returns stored=false if the exact record already exists."
+        input:
+          icsr_id: { type: string, description: "Case/record id." }
+          action: { type: string, description: "Governed action being recorded." }
+          phase: { type: string, description: "INTENT or COMMITTED." }
+          actor: { type: string, description: "Who acted." }
+          payload: { type: string, description: "Evidence payload (JSON string)." }
+        required: [icsr_id, action, phase]
+
+  - target: request-signoff
+    lambda: hou-request-signoff
+    handler: request_signoff.py
+    kind: control
+    mcp_tools:
+      - name: request_signoff
+        description: "Request housing-specialist sign-off before committing a determination; starts a separation-of-duties approval workflow. The agent can never commit directly."
+        input:
+          icsr_id: { type: string, description: "Case/record id." }
+          requester: { type: string, description: "The housing specialist requesting the commit." }
+        required: [icsr_id, requester]
+
+policies:
+  - { name: housing_specialist_permit, kind: permit, role_group: housing_specialist }
+  - { name: mask_before_assess,        kind: forbid, action: assess_housing_eligibility, unless_deidentified: true }
+  - { name: mask_before_recertify,     kind: forbid, action: recertify,           unless_deidentified: true }
+  - { name: mask_before_overpayment,   kind: forbid, action: detect_overpayment,  unless_deidentified: true }
+  - { name: mask_before_draft,         kind: forbid, action: draft_notice,        unless_deidentified: true }
+  - { name: no_self_commit,            kind: forbid, action: finalize_determination }
+  - { name: no_self_fraud_referral,    kind: forbid, action: refer_fraud }
+
+workflow:
+  entrypoint: agent.py
+  consequential_action: finalize_determination
+  steps:
+    - "intake_application - extract the non-PII decision fields (household size, annual income, county entityid) from the raw housing application."
+    - "lookup_income_limit - fetch the authoritative HUD income limits (30/50/80% AMI) for the household's county from the HUD USER Income Limits API (non-PII); keep the returned limits and il_source."
+    - "mask_pii - de-identify the raw record; use the returned masked_case for the notice and audit."
+    - "assess_housing_eligibility - on the extracted fields with deidentified true, using the real HUD limits and il_source, determine the income category and voucher eligibility."
+    - "draft_notice - draft the eligibility determination notice, passing the masked case and deidentified true."
+    - "write_audit - record an INTENT audit entry for the eligibility determination."
+    - "request_signoff - request housing-specialist sign-off to commit (a DIFFERENT qualified person must approve)."
+
+honesty_boundary:
+  stubbed: [verify_income_source, connect_system_of_record]
+  connectors: "EIV / PIC / HMIS / housing-authority system-of-record integration is customer engagement work"
+  not_certified: true
