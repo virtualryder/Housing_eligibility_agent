@@ -4,7 +4,7 @@ const { H1, H2, H3, P, bold, code, bullet, num, codeBlock, callout, table, space
 const cover = coverAndToc(
   ["Housing Eligibility Agent", "on Amazon Bedrock AgentCore"],
   "Solution Architect Deployment Runbook",
-  "Step-by-step deployment of the governed Housing Choice Voucher (Section 8) / public-housing eligibility accelerator into an AWS account — identity, governance spine, tools, the live HUD income-limit integration, and the Runtime agent — from one manifest. Region: us-east-1. Every command in this runbook was run end to end to stand the agent up and prove 30/30 in ENFORCE. Accelerator reference; not production-certified. Version 1.1 · 2026.",
+  "Step-by-step deployment of the governed Housing Choice Voucher (Section 8) / public-housing eligibility accelerator into an AWS account — identity, governance spine, tools, the live HUD income-limit integration, and the Runtime agent — from one manifest. Region: us-east-1. Every command in this runbook was run end to end to stand the agent up and prove 30/30 in ENFORCE. Accelerator reference; not production-certified. Version 1.2 · 2026.",
   ["1. Overview", "2. Prerequisites", "3. What gets deployed", "4. Deployment procedure", "5. Configuration reference", "6. Validation checklist", "7. Teardown", "8. Windows / Git-Bash operational notes"]
 );
 
@@ -38,6 +38,7 @@ const body = [
   bullet([bold("agents/housing-assistance/ "), "— the only agent-specific part: ", code("manifest.yaml"), " (single source of truth), ", code("tools/"), " (", code("intake_application.py"), ", ", code("lookup_income_limit.py"), ", ", code("assess_housing_eligibility.py"), ", ", code("recertify.py"), ", ", code("overpayment.py"), ", ", code("housing_core.py"), "), and ", code("demo_extra.sh"), "."]),
 
   bullet([bold("lib/connector/ "), "— the reusable governed OAuth connector (optional depth add-on): ", code("verify_source"), " (mints an outbound token via AgentCore Identity — no stored secret), ", code("deploy_connector.sh"), " / ", code("prove_connector.sh"), ", and a mock OAuth-protected system of record. Deployed separately from the spine."]),
+  bullet([bold("Corporate SSO (optional). "), code("lib/engine/deploy_federation.sh"), " + ", code("lib/controls/idp_group_mapper.py"), " federate an external OIDC/SAML IdP (Okta / Entra) into the pool so employees sign in with SSO and hit the SAME Cedar policies as the built-in users — see ", code("docs/IdP-Federation-Reference.md"), "."]),
   H1("3. What gets deployed"),
   table(["Component", "AWS resource(s)", "Lifecycle"], [
     [[bold("Identity")], "Cognito user pool hou-housing, app client hou-gw, users housing_specialist / approver / outsider", "Stable"],
@@ -45,7 +46,7 @@ const body = [
     [[bold("Gateway")], "AgentCore Gateway hou-housing-gw (MCP, CUSTOM_JWT, ENFORCE)", "Spine"],
     [[bold("Tools")], "Lambdas: hou-intake-application, hou-lookup-income-limit (HUD USER API), hou-mask-pii, hou-assess-eligibility, hou-recertify, hou-detect-overpayment, hou-core-tools, hou-write-audit, hou-request-signoff (+ 3 sign-off Lambdas)", "Spine"],
     [[bold("Guardrail")], "Bedrock Guardrail hou-housing-guardrail (PII anonymize + prompt-attack)", "Spine"],
-    [[bold("WORM audit")], "DynamoDB hou-audit (append-only) + S3 Object Lock bucket hou-audit-worm-<acct>-<region>", "Spine"],
+    [[bold("WORM audit")], "DynamoDB hou-audit (append-only) + S3 Object Lock bucket hou-audit-worm-<acct>-<region>; each record hash-chained (tamper-evident)", "Spine"],
     [[bold("Human gate")], "Step Functions hou-signoff + DynamoDB hou-pending-approvals", "Spine"],
     [[bold("Discovery")], "SSM parameter /hou-housing/gateway-url", "Spine"],
     [[bold("Runtime")], "AgentCore Runtime housing_runtime_agent (ARM64 container via CodeBuild + ECR)", "Runtime"],
@@ -76,6 +77,7 @@ const body = [
   P([bold("Deeper caseload workflows (step two). "), "The demo also exercises the deeper workflows, each a governed tool with its own control: ", code("recertify"), " (annual/interim re-certification — an ADVERSE change flags that advance notice and an informal hearing/review right are required before it takes effect, 24 CFR 982.555 / 966; fail-closed via ", code("mask_before_recertify"), "), ", code("detect_overpayment"), " (deterministic subsidy-overpayment math over a recovery period — recovery and referral stay human; fail-closed via ", code("mask_before_overpayment"), "), and ", code("refer_fraud"), " — a consequential, human-only action the agent can never take (forbidden by ", code("no_self_fraud_referral"), "). Every new high-risk action is a tool body plus its own deny-by-default forbid."]),
   P([{ text: "It ends with ", size: 21 }, code("=== 30 passed, 0 failed ===   GOVERNANCE DEMO: PASS"), { text: ".", size: 21 }]),
 
+  P([bold("Tamper-evident audit. "), "The demo also proves the audit ledger is ", bold("hash-chained"), ": each record embeds the prior record’s hash (", code("chain_hash = SHA-256(prev_hash + entry_hash)"), "), so editing, reordering, or deleting any record breaks every link after it — on top of the append-only + Object-Lock guarantees. ", code("lib/controls/verify_chain.py"), " replays the links and reports INTACT or the first broken record."]),
   H2("Step 3 — Deploy the Runtime agent"),
   P(["Create the Python 3.12 virtual environment and install the toolkit once. ", code("setup_venv.sh"), " builds the venv with the correct per-OS layout (on Windows a venv exposes ", code("Scripts/"), ", not ", code("bin/"), ") and installs ", code("bedrock-agentcore"), ", ", code("bedrock-agentcore-starter-toolkit"), ", ", code("strands-agents"), ", and ", code("strands-agents-tools"), " (a few minutes):"]),
   ...codeBlock(["bash lib/runtime/setup_venv.sh"]),
@@ -93,6 +95,10 @@ const body = [
   ...codeBlock(["bash lib/engine/redteam.sh agents/housing-assistance          # adversarial proof: governance holds under attack"]),
   P(["The connector proves the agent authenticates to a real, OAuth2-protected dependency without holding a secret. ", code("deploy_connector.sh"), " stands up a mock system of record (", code("MOCK-EIV-PIC"), ") behind API Gateway, an AgentCore Identity OAuth2 credential provider + workload identity, and the governed ", code("verify_source"), " tool. ", code("prove_connector.sh"), " mints a token through Identity and shows the SoR rejects unauthenticated calls, the tool holds no secret, and Cedar deny-by-default extends to the connector. The mock SoR verifies the token’s ", bold("RS256 signature against the Cognito JWKS"), " (not just its claims), so a forged or tampered token is rejected:"]),
   ...codeBlock(["bash lib/connector/deploy_connector.sh agents/housing-assistance   # mock SoR + Identity OAuth provider + verify_source", "bash lib/connector/prove_connector.sh  agents/housing-assistance   # OAuth + RS256/JWKS + no stored secret + deny-by-default"]),
+  H2("Step 6 (optional) — Federate your corporate IdP (SSO)"),
+  P(["Swap the built-in test users for real employees from Okta / Microsoft Entra / any OIDC or SAML IdP, WITHOUT changing a Cedar policy. A Cognito Pre-Token-Generation Lambda (", code("idp_group_mapper.py"), ") maps the IdP’s group claim into ", code("cognito:groups"), ", so the existing ", code("housing_specialist_permit"), " authorizes federated users; a user whose groups map to nothing gets no role, so deny-by-default still holds. Idempotent and independent of the spine."]),
+  ...codeBlock(["# OIDC (Okta / Entra / Ping …):", "IDP_TYPE=oidc IDP_NAME=Okta OIDC_ISSUER=https://<org>.okta.com \\", "  OIDC_CLIENT_ID=<id> OIDC_CLIENT_SECRET=<secret> GROUPS_CLAIM=groups \\", "  GROUP_MAP='{\"HousingSpecialists\":\"housing_specialist\"}' \\", "  bash lib/engine/deploy_federation.sh agents/housing-assistance", "# tear the federation back down (keeps the base pool + test users):", "DESTROY=1 IDP_NAME=Okta bash lib/engine/deploy_federation.sh agents/housing-assistance"]),
+  P(["Full recipe (SAML too), the group→role mapping, and the adopter-owns boundary: ", code("docs/IdP-Federation-Reference.md"), "."]),
   H1("5. Configuration reference"),
   table(["Setting", "Where", "Default / value"], [
     ["Region", "agent.region in the manifest", "us-east-1"],
@@ -115,6 +121,7 @@ const body = [
   bullet(["Runtime invoke: housing_specialist → workflow summary with ", code("finalize_determination"), " absent from tools; outsider → ACCESS DENIED, empty tools."]),
   bullet(["CloudWatch log group ", code("/aws/bedrock-agentcore/runtimes/housing_runtime_agent-*-DEFAULT"), " shows per-step, identity-tagged logs."]),
 
+  bullet(["Tamper-evident audit: ", code("lib/controls/verify_chain.py"), " on a case’s records reports ", code("intact: true"), "; altering any record makes it report the first broken link."]),
   H1("7. Teardown"),
   P("The spine tears down with zero residual (including the Object-Lock bucket, which requires an admin governance-bypass the tool role does not have). Identity is preserved by design — remove the pool and the Runtime explicitly for a full teardown."),
   ...codeBlock(["bash lib/engine/destroy.sh agents/housing-assistance         # spine only; leaves identity + Runtime", "# full cleanup (from lib/runtime, with the venv active):", "#   agentcore destroy                                       # runtime + ECR + CodeBuild", "#   aws cognito-idp delete-user-pool --user-pool-id <hou-housing pool id> --region us-east-1"]),
