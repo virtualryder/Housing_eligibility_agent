@@ -165,8 +165,9 @@ def main():
             raise SystemExit("unknown policy kind '%s'" % kind)
         # Prefix the policy name with the agent prefix. AgentCore Policy names are unique per
         # account/region, and template agents share logical names (mask_before_assess, no_self_commit,
-        # ...). Prefixing (e.g. ben-mask_before_assess) lets multiple agents coexist in one account.
-        prows.append("\t".join(["%s-%s" % (prefix, p["name"]), mode, stmt]))
+        # ...). Prefixing (e.g. ben_mask_before_assess) lets multiple agents coexist in one account.
+        # Policy names must match ^[A-Za-z][A-Za-z0-9_]*$ — underscore separator (no hyphen).
+        prows.append("\t".join(["%s_%s" % (prefix, p["name"]), mode, stmt]))
     open(os.path.join(build, "policies.tsv"), "w", encoding="utf-8", newline="\n").write("\n".join(prows) + "\n")
 
     # ---- guardrail config ----
