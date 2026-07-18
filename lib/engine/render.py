@@ -163,7 +163,10 @@ def main():
             mode = p.get("validation_mode", "IGNORE_ALL_FINDINGS")
         else:
             raise SystemExit("unknown policy kind '%s'" % kind)
-        prows.append("\t".join([p["name"], mode, stmt]))
+        # Prefix the policy name with the agent prefix. AgentCore Policy names are unique per
+        # account/region, and template agents share logical names (mask_before_assess, no_self_commit,
+        # ...). Prefixing (e.g. ben-mask_before_assess) lets multiple agents coexist in one account.
+        prows.append("\t".join(["%s-%s" % (prefix, p["name"]), mode, stmt]))
     open(os.path.join(build, "policies.tsv"), "w", encoding="utf-8", newline="\n").write("\n".join(prows) + "\n")
 
     # ---- guardrail config ----
