@@ -112,12 +112,16 @@ bash lib/engine/deploy.sh  agents/housing-assistance    # spine: engine -> gatew
 aws lambda update-function-configuration --function-name hou-lookup-income-limit \
   --environment "Variables={HUD_API_TOKEN=<your-token>}" --region us-east-1
 bash lib/engine/demo.sh    agents/housing-assistance    # governance proof (Cedar ENFORCE)
+bash lib/engine/redteam.sh agents/housing-assistance   # adversarial proof: governance holds under attack
 # Runtime (from a fresh venv):
 bash lib/runtime/setup_venv.sh
 bash lib/runtime/_obs_setup.sh  agents/housing-assistance
 bash lib/runtime/_configure.sh  agents/housing-assistance
 bash lib/runtime/_launch.sh     agents/housing-assistance
 bash lib/runtime/_invoke.sh     agents/housing-assistance housing_specialist   # or: bash invoke_demo.sh (with sample data)
+# Optional depth add-on — the governed OAuth connector (real outbound auth via AgentCore Identity, no stored secret):
+bash lib/connector/deploy_connector.sh agents/housing-assistance   # mock OAuth SoR (MOCK-EIV-PIC) + Identity provider + verify_source
+bash lib/connector/prove_connector.sh  agents/housing-assistance   # proves OAuth + RS256/JWKS signature check + no secret + deny-by-default
 bash lib/engine/destroy.sh agents/housing-assistance    # zero-residual teardown (identity preserved)
 ```
 
@@ -136,11 +140,12 @@ placeholder defaults (`ChangeMe-*1!`) — rotate before shared use. Region/accou
 lib/engine/     manifest-driven engine: render.py + deploy/demo/destroy + deploy_identity + signoff.asl.tmpl
 lib/controls/   shared control tools: mask_pii, write_audit, request/approve/finalize sign-off, mcp_client
 lib/runtime/    generic Strands agent on AgentCore Runtime (agent.py + Dockerfile + toolkit helpers)
+lib/connector/  reusable governed OAuth connector: verify_source (token via AgentCore Identity, no stored secret) + deploy/prove scripts + RS256/JWKS-verified mock SoR
 agents/housing-assistance/
                 manifest.yaml (single source of truth) + tools/ (intake_application, lookup_income_limit,
                 assess_housing_eligibility, recertify, overpayment, housing_core) + demo_extra.sh
 policies/       the seven Cedar policies (rendered from the manifest), human-readable + a README
-docs/           architecture note + Word/PowerPoint guides (regulatory-adherence, SA runbook, maintenance, decks)
+docs/           architecture note + Word/PowerPoint guides (regulatory-adherence, SA runbook, maintenance, depth-evidence, cost/latency one-pager, decks)
 ```
 
 The Cedar policies in `policies/` are the governance core — see `policies/README.md`. They are
@@ -154,7 +159,7 @@ human-gate workflow, the WORM audit design, the live HUD income-limit integratio
 The adopter owns: IdP federation and housing-specialist role mapping; validated connectors to the PHA
 system of record (EIV / PIC / HMIS); the authoritative program-admission rules/preferences and their
 legal review; computer-system validation; and production authorization to operate (StateRAMP / ATO).
-`verify_income_source` and system-of-record connectors ship as labeled stubs.
+The repo also ships a **real** governed OAuth connector — `verify_source` authenticates to a mock system of record via AgentCore Identity (no stored secret) and the SoR verifies the token's RS256 signature against the Cognito JWKS — as the reference pattern; connectors to the **production** system of record remain adopter work.
 
 ## License
 
