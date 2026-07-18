@@ -148,7 +148,7 @@ agents/housing-assistance/
                 manifest.yaml (single source of truth) + tools/ (intake_application, lookup_income_limit,
                 assess_housing_eligibility, recertify, overpayment, housing_core) + demo_extra.sh
 policies/       the seven Cedar policies (rendered from the manifest), human-readable + a README
-docs/           architecture note + Word/PowerPoint guides (regulatory-adherence, SA runbook, maintenance, depth-evidence, cost/latency one-pager; generators/ regenerates the guides & decks, decks)
+docs/           architecture note + Word/PowerPoint guides (regulatory-adherence, SA runbook, maintenance, depth-evidence, cost/latency one-pager, IdP-federation reference; generators/ regenerates the guides & decks, decks)
 ```
 
 The Cedar policies in `policies/` are the governance core — see `policies/README.md`. They are
@@ -159,7 +159,7 @@ form (account id and gateway ARN are placeholders).
 
 The accelerator owns the governed agent, the Cedar policies, the tools, the fail-closed masking, the
 human-gate workflow, the WORM audit design, the live HUD income-limit integration, the IaC, the tests.
-The adopter owns: IdP federation and housing-specialist role mapping; validated connectors to the PHA
+The adopter owns: IdP federation to their own provider (a working OIDC/SAML → Cognito → Cedar reference ships as `lib/engine/deploy_federation.sh` + `docs/IdP-Federation-Reference.md`, so federated users hit the same deny-by-default policies as the built-in users) and housing-specialist role mapping; validated connectors to the PHA
 system of record (EIV / PIC / HMIS); the authoritative program-admission rules/preferences and their
 legal review; computer-system validation; and production authorization to operate (StateRAMP / ATO).
 The repo also ships a **real** governed OAuth connector — `verify_source` authenticates to a mock system of record via AgentCore Identity (no stored secret) and the SoR verifies the token's RS256 signature against the Cognito JWKS — as the reference pattern; connectors to the **production** system of record remain adopter work.
