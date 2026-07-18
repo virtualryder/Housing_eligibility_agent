@@ -1,5 +1,7 @@
 # Housing Eligibility Agent — Governed Agentic AI on Amazon Bedrock AgentCore
 
+[![CI](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml)
+
 A **governed** Housing Choice Voucher (Section 8) / public-housing eligibility agent for State & Local
 Government. It intakes an application, looks up the **authoritative HUD income limit** for the
 household's county, de-identifies PII, determines the income category and voucher eligibility, drafts a
