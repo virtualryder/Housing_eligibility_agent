@@ -1,10 +1,17 @@
 """Test helper: load a governed tool's handler by name, from the agent tools or shared controls."""
 import importlib.util
 import pathlib
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 AGENT_TOOLS = ROOT / "agents" / "housing-assistance" / "tools"
 CONTROLS = ROOT / "lib" / "controls"
+
+# Make shared control modules importable by plain name (e.g. `import provenance` inside a tool handler),
+# mirroring how they are bundled into each Lambda zip at deploy time.
+for _p in (str(CONTROLS), str(AGENT_TOOLS)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 
 def load(name):

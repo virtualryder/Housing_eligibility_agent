@@ -15,15 +15,14 @@ check "outsider           intake_application" DENY  "$(call "$OUT" "$T_INTAKE" '
 echo "  -- authoritative HUD income limits via HUD USER API (LIVE federal API, governed) --"
 IL_OUT="$(call "$REV" "$T_IL" '{"entityid":"0603799999","household_size":4}')"
 check "housing_specialist lookup_income_limit" ALLOW "$IL_OUT"
-if echo "$IL_OUT" | grep -q '"found": *true' && echo "$IL_OUT" | grep -qi 'HUD'; then echo "  PASS | lookup_income_limit returned AUTHORITATIVE HUD limits + provenance"; pass=$((pass+1)); else echo "  WARN | lookup_income_limit -> $IL_OUT (needs HUD_API_TOKEN for the live call; using fallback limits below)"; fi
-# extract the value AFTER the colon (the key names il30/il50/il80 contain digits, so a bare [0-9]+
-# would match the key; sed captures only the number that follows the key).
-IL50_VAL="$(printf '%s' "$IL_OUT" | sed -nE 's/.*"il50":[[:space:]]*([0-9]+).*/\1/p' | head -1)"
-IL30_VAL="$(printf '%s' "$IL_OUT" | sed -nE 's/.*"il30":[[:space:]]*([0-9]+).*/\1/p' | head -1)"
-IL80_VAL="$(printf '%s' "$IL_OUT" | sed -nE 's/.*"il80":[[:space:]]*([0-9]+).*/\1/p' | head -1)"
-[ -z "$IL30_VAL" ] && IL30_VAL=30000
-[ -z "$IL50_VAL" ] && IL50_VAL=50000
-[ -z "$IL80_VAL" ] && IL80_VAL=80000
+# P0-3: a real lookup returns authoritative:true + a SIGNED il_source token. When HUD_API_TOKEN is not
+# configured the lookup is source-down (found:false, NO signed token) — we do NOT fabricate limits; the
+# assess step below then correctly refuses to issue an authoritative determination.
+if echo "$IL_OUT" | grep -q '"found": *true' && echo "$IL_OUT" | grep -q '"authoritative": *true'; then
+  echo "  PASS | lookup_income_limit returned AUTHORITATIVE HUD limits + a SIGNED provenance token"; pass=$((pass+1))
+else
+  echo "  INFO | live HUD lookup unavailable (needs HUD_API_TOKEN) — demonstrating the P0-3 NEEDS_REVIEW path below (no fabricated limits)"
+fi
 
 echo "  -- fail-closed PII de-identification (mask_pii) --"
 MASK_OUT="$(call "$REV" "$T_MASK" '{"case":"Applicant Jane Doe, SSN 123-45-6789, 42 Main St, applying for a Housing Choice Voucher; household 4, annual income 40000."}')"
@@ -32,10 +31,15 @@ if echo "$MASK_OUT" | grep -q 'REDACTED' && ! echo "$MASK_OUT" | grep -q 'Jane D
 
 echo "  -- forbid: mask-before-assess (eligibility determination) --"
 check "housing_specialist assess (UN-masked)" DENY "$(call "$REV" "$T_ASSESS" '{"annual_income":40000,"il50":50000,"deidentified":false}')"
-ASSESS_OUT="$(call "$REV" "$T_ASSESS" "{\"annual_income\":40000,\"household_size\":4,\"il30\":$IL30_VAL,\"il50\":$IL50_VAL,\"il80\":$IL80_VAL,\"il_source\":\"US Dept of Housing and Urban Development (HUD USER) - Income Limits\",\"deidentified\":true}")"
-check "housing_specialist assess (de-identified)" ALLOW "$ASSESS_OUT"
-if echo "$ASSESS_OUT" | grep -qE 'ELIGIBLE|NEEDS_REVIEW' && echo "$ASSESS_OUT" | grep -qE '"income_category"'; then echo "  PASS | assess_housing_eligibility returned a determination + income category"; pass=$((pass+1)); else echo "  FAIL | assess -> $ASSESS_OUT"; fail=$((fail+1)); fi
-if echo "$ASSESS_OUT" | grep -q '"il_provenance"' && ! echo "$ASSESS_OUT" | grep -q 'not supplied'; then echo "  PASS | determination carries HUD income-limit provenance (authoritative source in the audit trail)"; pass=$((pass+1)); else echo "  FAIL | il provenance missing -> $ASSESS_OUT"; fail=$((fail+1)); fi
+
+echo "  -- P0-3: assess trusts ONLY a lookup-signed provenance token (never a fabricated authoritative source) --"
+# Hand-typed HUD-looking limits + a HUD-looking source string, WITHOUT a valid lookup signature, must
+# NOT produce a determination — the exact fabrication the old demo committed (it hard-coded fallback
+# limits + a HUD label and got a fake ELIGIBLE). Now it routes to NEEDS_REVIEW, authoritative:false.
+FAB_OUT="$(call "$REV" "$T_ASSESS" '{"annual_income":40000,"household_size":4,"il30":30000,"il50":50000,"il80":80000,"il_source":"US Dept of Housing and Urban Development (HUD USER) - Income Limits","deidentified":true}')"
+check "housing_specialist assess (fabricated provenance)" ALLOW "$FAB_OUT"
+if echo "$FAB_OUT" | grep -q '"determination": *"NEEDS_REVIEW"' && echo "$FAB_OUT" | grep -q '"authoritative": *false'; then echo "  PASS | fabricated/unsigned limits -> NEEDS_REVIEW, authoritative:false (no fabricated HUD determination)"; pass=$((pass+1)); else echo "  FAIL | fabricated provenance was trusted -> $FAB_OUT"; fail=$((fail+1)); fi
+if echo "$FAB_OUT" | grep -q '"determination": *"ELIGIBLE"'; then echo "  FAIL | UNVERIFIED limits produced an ELIGIBLE determination -> $FAB_OUT"; fail=$((fail+1)); else echo "  PASS | no eligibility issued on unverified income limits (P0-3)"; pass=$((pass+1)); fi
 
 echo "  -- forbid: mask-before-model (eligibility notice) --"
 check "housing_specialist draft (UN-masked)" DENY "$(call "$REV" "$T_DRAFT" '{"case":"x","deidentified":false}')"
