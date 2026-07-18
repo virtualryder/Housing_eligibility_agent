@@ -145,7 +145,7 @@ agents/housing-assistance/
                 manifest.yaml (single source of truth) + tools/ (intake_application, lookup_income_limit,
                 assess_housing_eligibility, recertify, overpayment, housing_core) + demo_extra.sh
 policies/       the seven Cedar policies (rendered from the manifest), human-readable + a README
-docs/           architecture note + Word/PowerPoint guides (regulatory-adherence, SA runbook, maintenance, depth-evidence, cost/latency one-pager, decks)
+docs/           architecture note + Word/PowerPoint guides (regulatory-adherence, SA runbook, maintenance, depth-evidence, cost/latency one-pager; generators/ regenerates the guides & decks, decks)
 ```
 
 The Cedar policies in `policies/` are the governance core — see `policies/README.md`. They are
