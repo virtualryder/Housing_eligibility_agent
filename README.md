@@ -2,6 +2,9 @@
 
 [![CI](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml)
 
+> **Continuous validation.** CI runs render + unit + eval on every push. An **opt-in** end-to-end job (`.github/workflows/e2e.yml`, manual `workflow_dispatch`) deploys the spine to a sandbox AWS account, proves it live with the demo in ENFORCE, and tears it down — see the workflow header for one-time setup.
+
+
 A **governed** Housing Choice Voucher (Section 8) / public-housing eligibility agent for State & Local
 Government. It intakes an application, looks up the **authoritative HUD income limit** for the
 household's county, de-identifies PII, determines the income category and voucher eligibility, drafts a
