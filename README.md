@@ -90,7 +90,7 @@ sign-off gate (separation of duties + single-use token).
 
 ### Deeper caseload workflows (each a governed tool + its own Cedar control)
 
-The higher-risk the action, the stronger the governance. Beyond intake/adjudication, the agent adds:
+The higher-risk the action, the stronger the governance. Beyond intake/screening, the agent adds:
 
 - **`recertify`** — annual/interim re-certification that classifies the change and, on an **ADVERSE**
   result (a subsidy reduction or termination), flags that **timely advance notice and an informal

@@ -8,7 +8,7 @@
 
 agent:
   slug: housing-assistance
-  title: Housing Choice Voucher and Public Housing Eligibility
+  title: Housing Choice Voucher and Public Housing Eligibility Screening
   industry: SLG
   region: us-east-1
   prefix: hou
@@ -179,8 +179,8 @@ tools:
         description: "Request housing-specialist sign-off before committing a determination; starts a separation-of-duties approval workflow. The agent can never commit directly."
         input:
           icsr_id: { type: string, description: "Case/record id." }
-          access_token: { type: string, description: "The requester's validated Cognito access token; the requester identity is derived from it (P0-5), never from a name field." }
-        required: [icsr_id, access_token]
+          requester: { type: string, description: "The housing specialist requesting the commit." }
+        required: [icsr_id, requester]
 
 policies:
   - { name: housing_specialist_permit, kind: permit, role_group: housing_specialist }

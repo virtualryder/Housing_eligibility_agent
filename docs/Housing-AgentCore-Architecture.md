@@ -67,7 +67,7 @@ AWS now ships, in Amazon Bedrock AgentCore, the governance primitives a regulate
 
 ## 6a. Deeper caseload workflows (step two)
 
-Beyond intake and adjudication, the agent adds the workflows a real caseload needs — each a **new governed tool with its own Cedar control**, following one rule: the higher-risk the action, the stronger the governance.
+Beyond intake and screening, the agent adds the workflows a real caseload needs — each a **new governed tool with its own Cedar control**, following one rule: the higher-risk the action, the stronger the governance.
 
 - **`recertify`** — annual/interim re-certification. It re-runs the income rules on new facts, classifies the change, and on an **ADVERSE** result (a subsidy reduction or a termination of assistance) flags that **timely written advance notice** and an **informal hearing/review** right are required *before* the action takes effect (24 CFR 982.555 for HCV; 24 CFR 966 grievance for public housing). Fail-closed (`mask_before_recertify`).
 - **`detect_overpayment`** — deterministic housing-assistance overpayment math (subsidy paid vs. subsidy owed under corrected income, over a recovery period). Recovery and any referral remain human decisions. Fail-closed (`mask_before_overpayment`).
