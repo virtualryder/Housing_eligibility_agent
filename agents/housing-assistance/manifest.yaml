@@ -179,8 +179,8 @@ tools:
         description: "Request housing-specialist sign-off before committing a determination; starts a separation-of-duties approval workflow. The agent can never commit directly."
         input:
           icsr_id: { type: string, description: "Case/record id." }
-          requester: { type: string, description: "The housing specialist requesting the commit." }
-        required: [icsr_id, requester]
+          access_token: { type: string, description: "The requester's validated Cognito access token; the requester identity is derived from it (P0-5), never from a name field." }
+        required: [icsr_id, access_token]
 
 policies:
   - { name: housing_specialist_permit, kind: permit, role_group: housing_specialist }
