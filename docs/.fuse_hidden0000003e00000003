@@ -28,7 +28,7 @@ AWS now ships, in Amazon Bedrock AgentCore, the governance primitives a regulate
 | Tracing / observability | Native | **AgentCore Observability** — OpenTelemetry spans per agent/tool step |
 | Fail-closed PII de-identification | Build | `mask_pii` Gateway tool: Comprehend `DetectPiiEntities` (name, SSN, address, DOB…), before model + before audit |
 | Human sign-off gate (separation of duties) | Build | Step Functions `waitForTaskToken` — bound, single-use approval; AgentCore has no native human gate |
-| Append-only, tamper-evident WORM audit (due-process evidence) | Build | Append-only DynamoDB + S3 Object Lock; Observability traces are for ops, not tamper-proof evidence |
+| Immutable WORM audit (due-process evidence) | Build | Append-only DynamoDB + S3 Object Lock; Observability traces are for ops, not tamper-proof evidence |
 
 ## 4. Target architecture (components)
 
@@ -45,7 +45,7 @@ AWS now ships, in Amazon Bedrock AgentCore, the governance primitives a regulate
 **Built alongside — the regulated last mile:**
 - **Fail-closed PII de-identification:** the `mask_pii` tool de-identifies the application (Amazon Comprehend `DetectPiiEntities` — name, SSN, address, date of birth, and more) before the model drafts and before anything is written to the audit. Fail-closed — if masking can't run, the call stops rather than exposing PII.
 - **Human sign-off gate (separation of duties):** `request_signoff` starts a Step Functions execution that pauses on `waitForTaskToken`; a *different* qualified housing specialist approves with a bound, single-use token. The agent cannot finalize a determination itself.
-- **Append-only, tamper-evident WORM audit:** an append-only, tamper-evident record (append-only DynamoDB + S3 Object Lock) capturing `INTENT → COMMITTED` for the due-process evidence trail.
+- **Immutable WORM audit:** an append-only, tamper-evident record (append-only DynamoDB + S3 Object Lock) capturing `INTENT → COMMITTED` for the due-process evidence trail.
 
 ## 4a. Authoritative data — live HUD income limits
 
@@ -114,7 +114,7 @@ The shape is the point: a group-scoped permit, forbids that enforce masking-befo
 4. **Human sign-off gate** — Step Functions `waitForTaskToken` wired to `request_signoff` and `finalize_determination`.
 5. **WORM audit + Observability.**
 6. **Authoritative data** — inject the HUD API token into the `lookup_income_limit` Lambda (env / Secrets), kept out of the repo.
-7. **Manifest + validate** — the whole agent is one manifest; deploy; end-to-end run (Cedar allow/deny, live HUD lookup, masking, eligibility, real Bedrock notice, tamper-evident audit) + negative tests; teardown.
+7. **Manifest + validate** — the whole agent is one manifest; deploy; end-to-end run (Cedar allow/deny, live HUD lookup, masking, eligibility, real Bedrock notice, immutable audit) + negative tests; teardown.
 
 ## 9. What's ours vs. the customer's (honesty boundary)
 
@@ -125,7 +125,7 @@ The accelerator owns: the agent, the Cedar policies, the tools, the fail-closed 
 - **U.S. Housing Act / HUD regulations** (24 CFR 5 income limits & definitions, 982 HCV, 960/966 public housing) → `lookup_income_limit` + `assess_housing_eligibility` rules engine; the **qualified-specialist determination** → the human gate.
 - **Extremely-low-income targeting** (42 USC 1437n) → the targeting-priority flag in the determination.
 - **Due process** (24 CFR 982.555 HCV informal hearing / 24 CFR 966 public-housing grievance) → the drafted determination notice + the WORM record + the advance-notice flag on adverse recertification.
-- **Privacy Act / PII safeguarding** (applicant SSNs, income records) → fail-closed masking + least-privilege Cedar + tamper-evident audit + encryption.
+- **Privacy Act / PII safeguarding** (applicant SSNs, income records) → fail-closed masking + least-privilege Cedar + immutable audit + encryption.
 - **StateRAMP / NIST SP 800-53** (the authorization framework for state/local systems) → deny-by-default access control, audit, and the reproducible control evidence.
 
 Each of these becomes a control-to-requirement line in the regulatory-adherence guide.

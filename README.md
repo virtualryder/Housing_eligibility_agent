@@ -85,7 +85,7 @@ aws lambda update-function-configuration --function-name hou-lookup-income-limit
 deployed system with Cedar in **ENFORCE**: deny-by-default (housing specialist ALLOW / outsider DENY),
 the authoritative HUD income-limit lookup with provenance, fail-closed PII masking, the mask-before
 forbids firing *by name*, the eligibility determination + income category, a real guarded Bedrock
-notice, the immutable WORM audit (write-once + duplicate rejection), `no_self_commit`, and the human
+notice, the append-only, tamper-evident WORM audit (write-once + duplicate rejection), `no_self_commit`, and the human
 sign-off gate (separation of duties + single-use token).
 
 ### Deeper caseload workflows (each a governed tool + its own Cedar control)
