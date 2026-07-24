@@ -22,6 +22,7 @@ from housing_stacks.compute_stack import ComputeStack
 from housing_stacks.workflow_stack import WorkflowStack
 from housing_stacks.identity_stack import IdentityStack
 from housing_stacks.observability_stack import ObservabilityStack
+from housing_stacks.gateway_stack import GatewayStack
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -53,8 +54,9 @@ workflow = WorkflowStack(app, f"{prefix}-workflow", prefix=prefix, compute=compu
 identity = IdentityStack(app, f"{prefix}-identity", prefix=prefix)
 observability = ObservabilityStack(app, f"{prefix}-observability", prefix=prefix,
                                    compute=compute, workflow=workflow)
+gateway = GatewayStack(app, f"{prefix}-gateway", prefix=prefix, compute=compute, identity=identity)
 
-for s in (data, compute, workflow, identity, observability):
+for s in (data, compute, workflow, identity, observability, gateway):
     cdk.Tags.of(s).add("app", "housing-eligibility-agent")
     cdk.Tags.of(s).add("env", env_name)
     cdk.Tags.of(s).add("cost-center", "governed-agents")

@@ -167,3 +167,55 @@ def test_observability_stack_alarms_and_dashboard():
     # every alarm pages the ops topic
     s = json.dumps(tpl.to_json())
     assert s.count("AlarmActions") >= 8
+
+
+# ── GA-1: AgentCore/Gateway/Cedar attachment is IaC with full-coverage assertions ──
+
+def _gateway_stack():
+    from housing_stacks.gateway_stack import GatewayStack
+    app = aws_cdk.App()
+    asset = stage_lambda_bundle()
+    data = DataStack(app, "gd", prefix="hou-gw", retention_profile="sandbox-demo")
+    compute = ComputeStack(app, "gc", prefix="hou-gw", asset_dir=asset, data=data)
+    identity = IdentityStack(app, "gi", prefix="hou-gw")
+    return Template.from_stack(GatewayStack(app, "gg", prefix="hou-gw", compute=compute, identity=identity))
+
+
+T_GATEWAY = _gateway_stack()
+
+
+def test_attachment_covers_every_manifest_tool_and_enforce():
+    tpl = T_GATEWAY.to_json()
+    props = next(r["Properties"] for r in tpl["Resources"].values()
+                 if r["Type"] == "AWS::CloudFormation::CustomResource")
+    def _tokjson(v):
+        if isinstance(v, dict) and "Fn::Join" in v:   # ARN tokens synthesize as Fn::Join
+            return json.loads("".join(x if isinstance(x, str) else "ARN" for x in v["Fn::Join"][1]))
+        return json.loads(v)
+
+    targets = _tokjson(props["TargetsJson"])
+    names = {t["name"] for t in targets}
+    assert names == {"intake-application", "lookup-income-limit", "mask-pii", "assess-eligibility",
+                     "recertify", "detect-overpayment", "hou-core", "write-audit", "request-signoff"}
+    all_tools = [tool["name"] for t in targets for tool in t["tools"]]
+    assert "finalize_determination" in all_tools and "request_signoff" in all_tools
+    # no tool schema may declare a credential field (P0-3 holds at the gateway layer too)
+    for t in targets:
+        for tool in t["tools"]:
+            assert "access_token" not in tool["inputSchema"]["properties"]
+    policies = _tokjson(props["PoliciesJson"])
+    assert {p["name"] for p in policies} == {
+        "housing_specialist_permit", "mask_before_assess", "mask_before_recertify",
+        "mask_before_overpayment", "mask_before_draft", "no_self_commit", "no_self_fraud_referral"}
+    assert all("__GATEWAY_ARN__" in p["definition"] for p in policies if p["name"].startswith("no_self"))
+    assert props["Enforcement"] == "ENFORCE"
+    authz = props["AuthorizerConfigJson"]
+    authz_s = authz if isinstance(authz, str) else "".join(
+        x if isinstance(x, str) else "TOKEN" for x in authz["Fn::Join"][1])
+    assert "customJWTAuthorizer" in authz_s and "allowedClients" in authz_s
+
+
+def test_gateway_role_invokes_only_exact_lambda_arns():
+    s = json.dumps(T_GATEWAY.to_json())
+    assert "lambda:InvokeFunction" in s
+    assert "starts_with" not in s and ":function:*" not in s   # exact ARNs, never discovery/wildcards
