@@ -143,10 +143,43 @@ def test_no_default_password_anywhere_in_any_template():
 def test_signing_and_hud_secrets_provisioned_and_no_plaintext():
     tpl = T_COMPUTE.to_json()
     types = [r["Type"] for r in tpl.get("Resources", {}).values()]
-    assert types.count("AWS::SecretsManager::Secret") >= 2   # signing + HUD token
+    assert types.count("AWS::SecretsManager::Secret") >= 3   # GA-2: deid key + HUD key + HUD API token
     s = json.dumps(tpl)
-    assert "PROVENANCE_SECRET_ARN" in s and "HUD_API_TOKEN_ARN" in s
+    assert "PROVENANCE_SECRET_ARN_DEID" in s and "PROVENANCE_SECRET_ARN_HUD" in s \
+        and "HUD_API_TOKEN_ARN" in s
     assert '"PROVENANCE_SECRET"' not in s, "plaintext signing secret must not appear in the template"
+
+
+def test_ga2_domain_keys_are_separate_secrets_with_split_grants():
+    """GA-2: the deid and HUD signing keys are DIFFERENT SecretsManager resources, and IAM splits
+    them — the lookup function is granted the HUD key but NOT the deid key, and the masker is
+    granted the deid key but NOT the HUD key (cross-domain forgery impossible at IAM)."""
+    tpl = T_COMPUTE.to_json()
+    res = tpl.get("Resources", {})
+    secret_ids = [lid for lid, r in res.items() if r["Type"] == "AWS::SecretsManager::Secret"]
+    deid = [lid for lid in secret_ids if "SigningSecretDeid" in lid]
+    hud = [lid for lid in secret_ids if "SigningSecretHud" in lid]
+    assert deid and hud and deid != hud
+
+    def _grants(policy_lid_fragment):
+        """Set of secret logical ids referenced by IAM policies attached to roles whose logical id
+        contains the fragment (CDK names default policies after the function construct)."""
+        out = set()
+        for lid, r in res.items():
+            if r["Type"] != "AWS::IAM::Policy" or policy_lid_fragment not in lid:
+                continue
+            blob = json.dumps(r)
+            for sid in secret_ids:
+                if sid in blob:
+                    out.add(sid)
+        return out
+
+    lookup_grants = _grants("LookupIncomeLimit")
+    mask_grants = _grants("MaskPii")
+    assert hud[0] in lookup_grants and deid[0] not in lookup_grants, \
+        "lookup must read ONLY the HUD-domain key"
+    assert deid[0] in mask_grants and hud[0] not in mask_grants, \
+        "mask_pii must read ONLY the deid-domain key"
 
 
 # ── GA-6: observability stack — alarms + dashboard exist and page via SNS ────

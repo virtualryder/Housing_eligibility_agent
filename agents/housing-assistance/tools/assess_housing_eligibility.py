@@ -91,7 +91,7 @@ def handler(event, context):
             "household_size": hh,
             "il30": il30, "il50": il50, "il80": il80,
         }
-        prov_verified = provenance.verify(il_source.get("source", ""), fields, il_source)
+        prov_verified = provenance.verify(il_source.get("source", ""), fields, il_source, domain="hud")   # GA-2
 
     prov_source = il_source.get("source") if isinstance(il_source, dict) else None
 

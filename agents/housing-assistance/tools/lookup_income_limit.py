@@ -137,7 +137,7 @@ def handler(event, context):
     year_str = str((data.get("year") or year) or "")
     sig_fields = {"entityid": entityid, "year": year_str, "household_size": hh,
                   "il30": il30, "il50": il50, "il80": il80}
-    tok = provenance.sign(SOURCE, sig_fields)
+    tok = provenance.sign(SOURCE, sig_fields, domain="hud")   # GA-2: HUD trust domain key
     il_source_obj = {
         "source": SOURCE,
         "api": "huduser.gov/hudapi/public/il/data",

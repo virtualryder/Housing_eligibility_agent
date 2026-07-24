@@ -72,7 +72,7 @@ def guard_authoritative(e):
     fields = {"entityid": str(src.get("entityid") or ""), "year": str(src.get("year") or ""),
               "household_size": hh,
               "il30": _num(e.get("il30")), "il50": _num(e.get("il50")), "il80": _num(e.get("il80"))}
-    ok = provenance.verify(src.get("source", ""), fields, src)
+    ok = provenance.verify(src.get("source", ""), fields, src, domain="hud")   # GA-2: HUD trust domain key
     return ok, ("HUD limits carry a verified lookup signature" if ok else
                 "income limits are NOT verified authoritative (missing/forged/tampered signature)")
 

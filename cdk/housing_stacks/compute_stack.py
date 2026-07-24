@@ -23,20 +23,29 @@ class ComputeStack(cdk.Stack):
             "SANITIZED_TABLE": data.sanitized_table.table_name,
             "PENDING_TABLE": data.pending_table.table_name,
         }
-        # Per-deploy signing secret binding mask_pii artifacts + HUD provenance (P0-1/P0-3-prov).
-        # DEFAULT (Review-2): a generated AWS Secrets Manager secret, referenced by ARN — never
-        # plaintext in the template. A context-supplied plaintext secret remains available for
-        # disposable sandbox validation ONLY. HUD token is a separate operator-filled secret.
-        self.signing_secret = None
+        # Per-deploy signing secrets (P0-1/P0-3-prov + GA-2 key separation). DEFAULT (Review-2): a
+        # generated AWS Secrets Manager secret PER TRUST DOMAIN, referenced by ARN — never plaintext in
+        # the template. GA-2: the de-identification proof (mask_pii sanitized_ref) and the
+        # authoritative-source proof (HUD limits) are signed with DIFFERENT keys, so neither minter can
+        # forge the other's trust statement. A context-supplied plaintext secret remains available for
+        # disposable sandbox validation ONLY (shared across domains — acceptable in a throwaway
+        # sandbox, never in a pilot). HUD API token is a separate operator-filled secret.
+        self.signing_secret_deid = None
+        self.signing_secret_hud = None
         if provenance_secret:
-            common_env["PROVENANCE_SECRET"] = provenance_secret   # sandbox-only path
+            common_env["PROVENANCE_SECRET"] = provenance_secret   # sandbox-only path (shared)
         else:
-            self.signing_secret = sm.Secret(
-                self, "SigningSecret", secret_name=f"{prefix}/provenance-signing",
-                description="HMAC signing secret for sanitized-artifact + HUD provenance (rotate via new version; consumers re-read on cold start)",
-                generate_secret_string=sm.SecretStringGenerator(password_length=64, exclude_punctuation=True),
-            )
-            common_env["PROVENANCE_SECRET_ARN"] = self.signing_secret.secret_arn
+            gen = sm.SecretStringGenerator(password_length=64, exclude_punctuation=True)
+            self.signing_secret_deid = sm.Secret(
+                self, "SigningSecretDeid", secret_name=f"{prefix}/provenance-signing-deid",
+                description="GA-2 deid-domain HMAC key: signs mask_pii sanitized-artifact refs ONLY (rotate via new version; consumers re-read on cold start)",
+                generate_secret_string=gen)
+            self.signing_secret_hud = sm.Secret(
+                self, "SigningSecretHud", secret_name=f"{prefix}/provenance-signing-hud",
+                description="GA-2 HUD-domain HMAC key: signs authoritative income-limit provenance ONLY (rotate via new version; consumers re-read on cold start)",
+                generate_secret_string=gen)
+            common_env["PROVENANCE_SECRET_ARN_DEID"] = self.signing_secret_deid.secret_arn
+            common_env["PROVENANCE_SECRET_ARN_HUD"] = self.signing_secret_hud.secret_arn
         self.hud_token_secret = sm.Secret(
             self, "HudTokenSecret", secret_name=f"{prefix}/hud-api-token",
             description="HUD USER API bearer token (operator fills value; register at huduser.gov)",
@@ -66,12 +75,18 @@ class ComputeStack(cdk.Stack):
         self.guards = fn("workflow-guards", "workflow_guards")
 
         # ── explicit least-privilege wiring ──────────────────────────────────
-        # Secrets (Review-2): signing secret readable ONLY by the sign/verify functions; HUD token
-        # readable ONLY by the lookup. No other principal; no plaintext in the template.
-        if self.signing_secret is not None:
+        # Secrets (Review-2 + GA-2): each domain key readable ONLY by that domain's signer + verifiers.
+        # DEID key: mask_pii signs; the sanitized-ref verifiers verify. HUD key: lookup signs; the
+        # provenance verifiers (assess, guards) verify. The lookup CANNOT read the deid key and the
+        # masker CANNOT read the HUD key — cross-domain forgery is an IAM impossibility, not just a
+        # code convention. HUD API token readable ONLY by the lookup. No plaintext in the template.
+        if self.signing_secret_deid is not None:
             for f in (self.mask, self.assess, self.recertify, self.overpayment,
-                      self.core, self.guards, self.lookup):
-                self.signing_secret.grant_read(f)
+                      self.core, self.guards):
+                self.signing_secret_deid.grant_read(f)
+        if self.signing_secret_hud is not None:
+            for f in (self.lookup, self.assess, self.guards):
+                self.signing_secret_hud.grant_read(f)
         self.hud_token_secret.grant_read(self.lookup)
         data.pending_table.grant(self.signoff_register, "dynamodb:PutItem")
         data.pending_table.grant_read_write_data(self.finalize)   # marker read path uses audit table; pending read for ops

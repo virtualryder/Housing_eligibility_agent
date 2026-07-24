@@ -23,7 +23,8 @@
 | `-c kms=` | aws-managed | customer-managed | customer-managed |
 
 Secrets (created by the compute stack, values operator-managed):
-- `hou-<env>/provenance-signing` — generated automatically; never plaintext anywhere.
+- `hou-<env>/provenance-signing-deid` — generated automatically; signs mask_pii sanitized-artifact refs ONLY (GA-2 trust-domain key; never plaintext anywhere).
+- `hou-<env>/provenance-signing-hud` — generated automatically; signs authoritative HUD income-limit provenance ONLY (GA-2; IAM prevents the masker reading this key and the lookup reading the deid key).
 - `hou-<env>/hud-api-token` — token already staged in Secrets Manager (`hud-user/api-token`, validated live 2026-07-24 against LA County/2026); copy at deploy:
   `aws secretsmanager get-secret-value --secret-id hud-user/api-token --query SecretString --output text | xargs -I{} aws secretsmanager put-secret-value --secret-id hou-<env>/hud-api-token --secret-string {}` (never write the token to a tracked file; local dev uses the gitignored `lib/runtime/.hud-token.env`).
 

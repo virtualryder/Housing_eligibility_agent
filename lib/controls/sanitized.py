@@ -109,7 +109,7 @@ def mint_ref(masked_text, engine, entities_masked=0, tenant="default", store=Non
         "tenant": tenant,
         "ts": int(time.time()),
     }
-    tok = provenance.sign(SOURCE, fields)
+    tok = provenance.sign(SOURCE, fields, domain="deid")   # GA-2: de-identification trust domain key
     ref = dict(fields)
     ref.update({"source": SOURCE, "authoritative": tok["authoritative"],
                 "sig": tok["sig"], "alg": tok["alg"]})
@@ -153,7 +153,7 @@ def verify_ref(ref):
         fields["ts"] = int(fields.get("ts") or 0)
     except Exception:
         return False
-    return provenance.verify(ref.get("source", SOURCE), fields, ref)
+    return provenance.verify(ref.get("source", SOURCE), fields, ref, domain="deid")   # GA-2
 
 
 def load_text(ref, candidate_text=None, store=None):
