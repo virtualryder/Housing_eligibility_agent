@@ -182,6 +182,46 @@ def test_ga2_domain_keys_are_separate_secrets_with_split_grants():
         "mask_pii must read ONLY the deid-domain key"
 
 
+# ── Gate-B B1: private networking + locked egress ─────────────────────────────
+
+def test_network_stack_locked_egress_and_vpc_lambdas():
+    from housing_stacks.network_stack import NetworkStack, ALLOWED_DOMAINS
+    app = aws_cdk.App()
+    asset = stage_lambda_bundle()
+    net = NetworkStack(app, "nn", prefix="hou-net")
+    data = DataStack(app, "nd", prefix="hou-net", retention_profile="pilot")
+    compute = ComputeStack(app, "nc", prefix="hou-net", asset_dir=asset, data=data, network=net)
+
+    nt = Template.from_stack(net).to_json()
+    blob = json.dumps(nt)
+    types = [r["Type"] for r in nt["Resources"].values()]
+    # firewall + deny-by-default allowlist naming ONLY the HUD domain
+    assert "AWS::NetworkFirewall::Firewall" in types
+    assert "AWS::NetworkFirewall::RuleGroup" in types
+    assert ".huduser.gov" in blob and ALLOWED_DOMAINS == [".huduser.gov"]
+    assert '"GeneratedRulesType": "ALLOWLIST"' in blob
+    # AWS-service traffic stays private: gateway + interface endpoints
+    assert types.count("AWS::EC2::VPCEndpoint") >= 9   # s3+ddb gateway, 7 interface
+    # app subnets are ISOLATED (no direct NAT default route from CDK; our routes go to the firewall)
+    assert '"VpcEndpointId"' in blob                    # firewall-endpoint routes present
+    # lambda SG: no allow-all egress; 443 only
+    sgs = [r for r in nt["Resources"].values() if r["Type"] == "AWS::EC2::SecurityGroup"
+           and "tools" in json.dumps(r.get("Properties", {}).get("GroupName", ""))]
+    assert sgs, "lambda security group missing"
+    eg = sgs[0]["Properties"]["SecurityGroupEgress"]
+    assert all(e.get("FromPort") == 443 and e.get("ToPort") == 443 for e in eg)
+
+    # every governed tool Lambda runs inside the VPC
+    ct = Template.from_stack(compute).to_json()
+    fns = [r for r in ct["Resources"].values() if r["Type"] == "AWS::Lambda::Function"]
+    assert fns and all("VpcConfig" in f["Properties"] for f in fns)
+
+
+def test_default_mode_lambdas_have_no_vpc():
+    fns = [r for r in T_COMPUTE.to_json()["Resources"].values() if r["Type"] == "AWS::Lambda::Function"]
+    assert fns and all("VpcConfig" not in f["Properties"] for f in fns)
+
+
 # ── Gate-B B3: pilot identity — REQUIRED software MFA, threat protection, OIDC IdP as IaC ──
 
 def test_pilot_identity_requires_software_mfa_and_threat_protection():

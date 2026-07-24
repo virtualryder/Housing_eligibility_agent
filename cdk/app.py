@@ -18,6 +18,7 @@ import shutil
 import aws_cdk as cdk
 
 from housing_stacks.data_stack import DataStack
+from housing_stacks.network_stack import NetworkStack
 from housing_stacks.compute_stack import ComputeStack
 from housing_stacks.workflow_stack import WorkflowStack
 from housing_stacks.identity_stack import IdentityStack
@@ -48,8 +49,12 @@ asset_dir = stage_lambda_bundle()
 
 data = DataStack(app, f"{prefix}-data", prefix=prefix, retention_profile=profile,
                  kms_mode=app.node.try_get_context("kms") or "aws-managed")
+network = None
+if (app.node.try_get_context("network_mode") or "public") == "private":
+    network = NetworkStack(app, f"{prefix}-network", prefix=prefix)
 compute = ComputeStack(app, f"{prefix}-compute", prefix=prefix, asset_dir=asset_dir, data=data,
-                       provenance_secret=app.node.try_get_context("provenance_secret") or "")
+                       provenance_secret=app.node.try_get_context("provenance_secret") or "",
+                       network=network)
 workflow = WorkflowStack(app, f"{prefix}-workflow", prefix=prefix, compute=compute, data=data)
 identity = IdentityStack(
     app, f"{prefix}-identity", prefix=prefix,
@@ -63,7 +68,7 @@ observability = ObservabilityStack(app, f"{prefix}-observability", prefix=prefix
                                    compute=compute, workflow=workflow, data=data)
 gateway = GatewayStack(app, f"{prefix}-gateway", prefix=prefix, compute=compute, identity=identity)
 
-for s in (data, compute, workflow, identity, observability, gateway):
+for s in (data, compute, workflow, identity, observability, gateway) + ((network,) if network else ()):
     cdk.Tags.of(s).add("app", "housing-eligibility-agent")
     cdk.Tags.of(s).add("env", env_name)
     cdk.Tags.of(s).add("cost-center", "governed-agents")

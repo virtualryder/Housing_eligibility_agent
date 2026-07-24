@@ -6,7 +6,8 @@ vault (with an explicit Deny on mutation/bypass); mask_pii can only Comprehend-d
 sanitized store; the assessor/guards only read the sanitized store; the drafter only invokes Bedrock.
 Exact ARNs are exported — nothing downstream discovers by name (P0-7)."""
 import aws_cdk as cdk
-from aws_cdk import aws_iam as iam, aws_kms as kms, aws_lambda as lambda_, aws_logs as logs, aws_secretsmanager as sm
+from aws_cdk import (aws_ec2 as ec2, aws_iam as iam, aws_kms as kms, aws_lambda as lambda_,
+                     aws_logs as logs, aws_secretsmanager as sm)
 from constructs import Construct
 
 RUNTIME = lambda_.Runtime.PYTHON_3_12
@@ -14,7 +15,7 @@ RUNTIME = lambda_.Runtime.PYTHON_3_12
 
 class ComputeStack(cdk.Stack):
     def __init__(self, scope: Construct, cid: str, *, prefix: str, asset_dir: str, data,
-                 provenance_secret: str = "", **kw):
+                 provenance_secret: str = "", network=None, **kw):
         super().__init__(scope, cid, **kw)
         code = lambda_.Code.from_asset(asset_dir)
         # Gate-B (customer-managed KMS): when the DataStack was deployed with kms=customer-managed,
@@ -72,13 +73,20 @@ class ComputeStack(cdk.Stack):
                     log_group_name=f"/aws/lambda/{prefix}-{name}",
                     encryption_key=cmk, retention=logs.RetentionDays.ONE_YEAR,
                     removal_policy=cdk.RemovalPolicy.DESTROY)
+            # Gate-B (B1): with a NetworkStack, every governed tool runs in the private app subnets
+            # behind the egress firewall — no direct internet path exists from any tool.
+            net = {}
+            if network is not None:
+                net = dict(vpc=network.vpc,
+                           vpc_subnets=ec2.SubnetSelection(subnet_group_name="app"),
+                           security_groups=[network.lambda_sg])
             f = lambda_.Function(
                 self, name.replace("-", " ").title().replace(" ", ""),
                 function_name=f"{prefix}-{name}", runtime=RUNTIME, code=code,
                 handler=f"{handler_module}.handler",
                 timeout=cdk.Duration.seconds(timeout), memory_size=256,
                 environment={**common_env, **(env or {})},
-                environment_encryption=cmk, log_group=log_group,
+                environment_encryption=cmk, log_group=log_group, **net,
             )
             if cmk is not None:
                 cmk.grant_decrypt(f)   # runtime decrypt of CMK-encrypted env vars (role policy)
