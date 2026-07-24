@@ -3,6 +3,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 import sanitized  # server-issued sanitized-artifact references (P0-1; bundled beside this handler)
+import tenancy    # Gate-B B5: tenant is deployment-pinned, never taken from the request body
 
 # mask_pii — fail-closed general PII de-identification via Amazon Comprehend DetectPiiEntities
 # (name, SSN, address, DOB, phone, email, bank/routing, etc.). Reusable control for non-health
@@ -46,8 +47,10 @@ def handler(event, context):
         if b is None or end is None:
             continue
         masked = masked[:b] + ("[REDACTED:%s]" % t) + masked[end:]
+    # B5: the tenant stamped (and HMAC-signed) into the ref is the DEPLOYMENT'S pinned tenant —
+    # any tenant value in the request body is ignored by design (identity is derived, not requested).
     ref = sanitized.mint_ref(masked, engine="comprehend:DetectPiiEntities",
-                             entities_masked=len(ents), tenant=e.get("tenant", "default"))
+                             entities_masked=len(ents), tenant=tenancy.resolve_tenant(e))
     return {"deidentified": True, "masked_case": masked, "entities_masked": len(ents),
             "masked_by": "comprehend:DetectPiiEntities",
             "sanitized_ref": ref,

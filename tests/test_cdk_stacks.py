@@ -217,6 +217,17 @@ def test_network_stack_locked_egress_and_vpc_lambdas():
     assert fns and all("VpcConfig" in f["Properties"] for f in fns)
 
 
+def test_tenant_pinned_into_every_function_env():
+    app = aws_cdk.App()
+    asset = stage_lambda_bundle()
+    data = DataStack(app, "td", prefix="hou-ten", retention_profile="pilot")
+    compute = ComputeStack(app, "tc", prefix="hou-ten", asset_dir=asset, data=data, tenant="pha-la-county")
+    fns = [r for r in Template.from_stack(compute).to_json()["Resources"].values()
+           if r["Type"] == "AWS::Lambda::Function"]
+    assert fns and all(
+        f["Properties"]["Environment"]["Variables"].get("TENANT_ID") == "pha-la-county" for f in fns)
+
+
 def test_default_mode_lambdas_have_no_vpc():
     fns = [r for r in T_COMPUTE.to_json()["Resources"].values() if r["Type"] == "AWS::Lambda::Function"]
     assert fns and all("VpcConfig" not in f["Properties"] for f in fns)

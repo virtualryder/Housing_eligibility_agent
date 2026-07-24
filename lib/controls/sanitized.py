@@ -97,10 +97,14 @@ def default_store():
 
 
 # ── mint / parse / verify / load ─────────────────────────────────────────────
-def mint_ref(masked_text, engine, entities_masked=0, tenant="default", store=None):
+def mint_ref(masked_text, engine, entities_masked=0, tenant=None, store=None):
     """Called ONLY by mask_pii after masking succeeded. Signs the exact masked content and (when a store
     is available) persists it server-side. authoritative=False when no secret is configured — a mask
-    running without the secret self-reports unproven rather than pretending."""
+    running without the secret self-reports unproven rather than pretending.
+    B5: tenant defaults to the DEPLOYMENT'S pinned tenant (tenancy.resolve_tenant), never caller input."""
+    if tenant is None:
+        import tenancy
+        tenant = tenancy.resolve_tenant()
     fields = {
         "artifact_id": uuid.uuid4().hex,
         "sanitized_sha256": sha256_text(masked_text),
@@ -141,7 +145,9 @@ def parse_ref(raw):
 
 def verify_ref(ref):
     """True ONLY if `ref` carries a signature minted by mask_pii over exactly these fields (proof of
-    masking). Missing/None/tampered/forged/unsigned -> False. Never trusts a bare boolean."""
+    masking) AND belongs to THIS deployment's tenant (Gate-B B5 — a validly-signed artifact from
+    another tenant/deployment is refused). Missing/None/tampered/forged/unsigned -> False. Never
+    trusts a bare boolean."""
     ref = parse_ref(ref)
     if not isinstance(ref, dict):
         return False
@@ -153,7 +159,10 @@ def verify_ref(ref):
         fields["ts"] = int(fields.get("ts") or 0)
     except Exception:
         return False
-    return provenance.verify(ref.get("source", SOURCE), fields, ref, domain="deid")   # GA-2
+    if not provenance.verify(ref.get("source", SOURCE), fields, ref, domain="deid"):   # GA-2
+        return False
+    import tenancy   # bundled beside this module at deploy; on sys.path in tests
+    return tenancy.check_ref_tenant(ref)   # B5: cross-tenant refs fail-closed
 
 
 def load_text(ref, candidate_text=None, store=None):

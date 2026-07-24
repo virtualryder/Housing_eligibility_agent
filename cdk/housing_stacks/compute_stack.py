@@ -15,7 +15,7 @@ RUNTIME = lambda_.Runtime.PYTHON_3_12
 
 class ComputeStack(cdk.Stack):
     def __init__(self, scope: Construct, cid: str, *, prefix: str, asset_dir: str, data,
-                 provenance_secret: str = "", network=None, **kw):
+                 provenance_secret: str = "", network=None, tenant: str = "", **kw):
         super().__init__(scope, cid, **kw)
         code = lambda_.Code.from_asset(asset_dir)
         # Gate-B (customer-managed KMS): when the DataStack was deployed with kms=customer-managed,
@@ -34,6 +34,10 @@ class ComputeStack(cdk.Stack):
             "SANITIZED_TABLE": data.sanitized_table.table_name,
             "PENDING_TABLE": data.pending_table.table_name,
         }
+        # Gate-B B5: the deployment's pinned tenant (one PHA per isolated deployment). Tenant identity
+        # is DERIVED from this, never from any request body (lib/controls/tenancy.py).
+        if tenant:
+            common_env["TENANT_ID"] = tenant
         # Per-deploy signing secrets (P0-1/P0-3-prov + GA-2 key separation). DEFAULT (Review-2): a
         # generated AWS Secrets Manager secret PER TRUST DOMAIN, referenced by ARN — never plaintext in
         # the template. GA-2: the de-identification proof (mask_pii sanitized_ref) and the

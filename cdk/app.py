@@ -54,7 +54,8 @@ if (app.node.try_get_context("network_mode") or "public") == "private":
     network = NetworkStack(app, f"{prefix}-network", prefix=prefix)
 compute = ComputeStack(app, f"{prefix}-compute", prefix=prefix, asset_dir=asset_dir, data=data,
                        provenance_secret=app.node.try_get_context("provenance_secret") or "",
-                       network=network)
+                       network=network,
+                       tenant=app.node.try_get_context("tenant") or "")
 workflow = WorkflowStack(app, f"{prefix}-workflow", prefix=prefix, compute=compute, data=data)
 identity = IdentityStack(
     app, f"{prefix}-identity", prefix=prefix,
