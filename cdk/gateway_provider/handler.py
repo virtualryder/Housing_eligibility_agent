@@ -33,9 +33,23 @@ def _wait(fn, want, tries=40, delay=6):
     raise RuntimeError(f"resource did not reach {want}")
 
 
+def _find_engine(cc, name):
+    try:
+        for e in cc.list_policy_engines().get("policyEngines", []):
+            if e.get("name") == name:
+                return e["policyEngineId"]
+    except Exception:
+        pass
+    return None
+
+
 def _create(cc, ssm, p, region, acct):
-    engine_id = cc.create_policy_engine(name=p["EngineName"],
-                                        description=p.get("EngineDesc", ""))["policyEngineId"]
+    # Live-run find: a failed CreateGateway can orphan the policy engine (created first). Reuse an
+    # existing engine with our name instead of ConflictException-failing forever.
+    engine_id = _find_engine(cc, p["EngineName"])
+    if engine_id is None:
+        engine_id = cc.create_policy_engine(name=p["EngineName"],
+                                            description=p.get("EngineDesc", ""))["policyEngineId"]
     engine_arn = f"arn:aws:bedrock-agentcore:{region}:{acct}:policy-engine/{engine_id}"
     _wait(lambda: cc.get_policy_engine(policyEngineId=engine_id)["status"], "ACTIVE")
 
@@ -85,11 +99,23 @@ def _delete(cc, ssm, p, gw_id):
     try:
         eng = cc.get_gateway(gatewayIdentifier=gw_id)["policyEngineConfiguration"]["arn"].split("/")[-1]
     except Exception:
+        # No gateway — but a failed create may have ORPHANED the engine; clean it by name.
+        orphan = _find_engine(cc, p.get("EngineName", ""))
+        if orphan:
+            try:
+                for pol in cc.list_policies(policyEngineId=orphan).get("policies", []):
+                    cc.delete_policy(policyEngineId=orphan, policyId=pol["policyId"])
+            except Exception:
+                pass
+            try:
+                cc.delete_policy_engine(policyEngineId=orphan)
+            except Exception:
+                pass
         try:
             ssm.delete_parameter(Name=p.get("SsmParam", ""))
         except Exception:
             pass
-        return   # nothing was created; nothing to tear down
+        return   # nothing (else) was created
     if eng:
         for pol in cc.list_policies(policyEngineId=eng).get("policies", []):
             try:

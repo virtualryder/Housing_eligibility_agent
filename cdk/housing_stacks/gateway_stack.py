@@ -77,12 +77,19 @@ class GatewayStack(cdk.Stack):
         # read + evaluate its policy engine; without these, creation fails with AccessDenied.
         gw_role.add_to_policy(iam.PolicyStatement(
             actions=["bedrock-agentcore:GetPolicyEngine", "bedrock-agentcore:GetPolicy",
-                     "bedrock-agentcore:ListPolicies", "bedrock-agentcore:EvaluatePolicies"],
+                     "bedrock-agentcore:ListPolicies", "bedrock-agentcore:EvaluatePolicies",
+                     # the CreateGateway permission check is a FAMILY (AuthorizeAction,
+                     # PartiallyAuthorizeActions, ...) — grant the family, resource-scoped
+                     "bedrock-agentcore:*Authorize*"],
             resources=[f"arn:aws:bedrock-agentcore:{self.region}:{self.account}:policy-engine/*",
-                       f"arn:aws:bedrock-agentcore:{self.region}:{self.account}:policy-engine/*/policy/*"]))
+                       f"arn:aws:bedrock-agentcore:{self.region}:{self.account}:policy-engine/*/policy/*",
+                       # Live-run find #2: the check also authorizes against the GATEWAY resource itself
+                       f"arn:aws:bedrock-agentcore:{self.region}:{self.account}:gateway/*"]))
 
+        # Live-run find #3: a FIXED function name re-created right after deletion makes CloudFormation's
+        # async custom-resource invoke stall (stale name resolution). Let CDK generate a unique name.
         provider_fn = lambda_.Function(
-            self, "AttachmentProvider", function_name=f"{prefix}-agentcore-attachment",
+            self, "AttachmentProvider",
             runtime=lambda_.Runtime.PYTHON_3_12, memory_size=256, timeout=cdk.Duration.minutes(15),
             code=lambda_.Code.from_asset(str(pathlib.Path(__file__).resolve().parents[1] / "gateway_provider")),
             handler="handler.handler")
