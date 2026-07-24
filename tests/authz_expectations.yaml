@@ -1,0 +1,21 @@
+# GA-9 — the authorization contract (Review-2). EVERY MCP tool in the manifest MUST have an entry
+# here; test_cedar_properties.py fails CI on any tool without a declared expectation, so a newly added
+# tool is automatically denied a green build until its authorization posture is explicitly decided.
+#
+# access values:
+#   specialist        — reachable by the housing_specialist group under the broad permit
+#   specialist+masking-forbid — specialist access, but Cedar forbids unless a de-identification claim
+#                        is present (and the tool body additionally requires the SIGNED sanitized_ref)
+#   forbidden-to-all  — a forbid names the action outright; no principal may invoke it via the gateway
+tools:
+  intake_application:            { access: specialist }
+  lookup_income_limit:           { access: specialist }
+  mask_pii:                      { access: specialist }
+  assess_housing_eligibility:    { access: specialist+masking-forbid, forbid_policy: mask_before_assess }
+  recertify:                     { access: specialist+masking-forbid, forbid_policy: mask_before_recertify }
+  detect_overpayment:            { access: specialist+masking-forbid, forbid_policy: mask_before_overpayment }
+  draft_notice:                  { access: specialist+masking-forbid, forbid_policy: mask_before_draft }
+  finalize_determination:        { access: forbidden-to-all, forbid_policy: no_self_commit }
+  refer_fraud:                   { access: forbidden-to-all, forbid_policy: no_self_fraud_referral }
+  write_audit:                   { access: specialist }
+  request_signoff:               { access: specialist }

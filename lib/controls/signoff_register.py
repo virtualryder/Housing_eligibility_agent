@@ -16,8 +16,27 @@ def handler(event, context):
     case_id = e.get("case_id") or e.get("icsr_id")
     requester = e.get("requester")
     token = e.get("taskToken")
-    boto3.resource("dynamodb", region_name=region).Table(PENDING_TABLE).put_item(
-        Item={"case_id": case_id, "requester": requester, "task_token": token,
-              "status": "PENDING", "created": int(time.time())}
-    )
-    return {"registered": True, "case_id": case_id}
+    # GA-5: DUPLICATE-SUBMISSION protection — a second concurrent execution for the same case must
+    # not silently overwrite the first pending approval (that would strand the first execution's task
+    # token). Conditional put: an existing PENDING registration makes this a duplicate -> fail loud,
+    # the duplicate execution fails closed. content_hash (of the assessment the approver will see)
+    # binds the approval to the exact content (approval-after-change evidence).
+    from botocore.exceptions import ClientError
+    item = {"case_id": case_id, "requester": requester, "task_token": token,
+            "status": "PENDING", "created": int(time.time())}
+    if e.get("content_hash"):
+        item["content_hash"] = e["content_hash"]
+    try:
+        boto3.resource("dynamodb", region_name=region).Table(PENDING_TABLE).put_item(
+            Item=item,
+            ConditionExpression="attribute_not_exists(case_id) OR #s <> :pending",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={":pending": "PENDING"},
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            raise RuntimeError(
+                "duplicate submission: case %s already has a PENDING approval (fail-closed; "
+                "resolve or expire the first request before re-submitting)" % case_id)
+        raise
+    return {"registered": True, "case_id": case_id, "content_hash": item.get("content_hash")}

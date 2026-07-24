@@ -147,3 +147,23 @@ def test_signing_and_hud_secrets_provisioned_and_no_plaintext():
     s = json.dumps(tpl)
     assert "PROVENANCE_SECRET_ARN" in s and "HUD_API_TOKEN_ARN" in s
     assert '"PROVENANCE_SECRET"' not in s, "plaintext signing secret must not appear in the template"
+
+
+# ── GA-6: observability stack — alarms + dashboard exist and page via SNS ────
+
+def test_observability_stack_alarms_and_dashboard():
+    from housing_stacks.observability_stack import ObservabilityStack
+    app = aws_cdk.App()
+    asset = stage_lambda_bundle()
+    data = DataStack(app, "od", prefix="hou-obs", retention_profile="sandbox-demo")
+    compute = ComputeStack(app, "oc", prefix="hou-obs", asset_dir=asset, data=data)
+    workflow = WorkflowStack(app, "ow", prefix="hou-obs", compute=compute, data=data)
+    obs = ObservabilityStack(app, "oo", prefix="hou-obs", compute=compute, workflow=workflow)
+    tpl = Template.from_stack(obs)
+    types = [r["Type"] for r in tpl.to_json().get("Resources", {}).values()]
+    assert types.count("AWS::CloudWatch::Alarm") >= 8       # 3 workflow + 5 lambda-error alarms
+    assert "AWS::CloudWatch::Dashboard" in types
+    assert "AWS::SNS::Topic" in types
+    # every alarm pages the ops topic
+    s = json.dumps(tpl.to_json())
+    assert s.count("AlarmActions") >= 8

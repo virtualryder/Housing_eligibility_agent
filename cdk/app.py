@@ -21,6 +21,7 @@ from housing_stacks.data_stack import DataStack
 from housing_stacks.compute_stack import ComputeStack
 from housing_stacks.workflow_stack import WorkflowStack
 from housing_stacks.identity_stack import IdentityStack
+from housing_stacks.observability_stack import ObservabilityStack
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -50,8 +51,10 @@ compute = ComputeStack(app, f"{prefix}-compute", prefix=prefix, asset_dir=asset_
                        provenance_secret=app.node.try_get_context("provenance_secret") or "")
 workflow = WorkflowStack(app, f"{prefix}-workflow", prefix=prefix, compute=compute, data=data)
 identity = IdentityStack(app, f"{prefix}-identity", prefix=prefix)
+observability = ObservabilityStack(app, f"{prefix}-observability", prefix=prefix,
+                                   compute=compute, workflow=workflow)
 
-for s in (data, compute, workflow, identity):
+for s in (data, compute, workflow, identity, observability):
     cdk.Tags.of(s).add("app", "housing-eligibility-agent")
     cdk.Tags.of(s).add("env", env_name)
     cdk.Tags.of(s).add("cost-center", "governed-agents")

@@ -81,6 +81,8 @@ class WorkflowStack(cdk.Stack):
             integration_pattern=sfn.IntegrationPattern.WAIT_FOR_TASK_TOKEN,
             payload=sfn.TaskInput.from_object(
                 {"icsr_id.$": "$.case_id", "requester.$": "$.requester",
+                 # GA-5: bind the approval to the EXACT assessment content the approver saw
+                 "content_hash.$": "States.Hash(States.JsonToString($.assessment.out), 'SHA-256')",
                  "taskToken": sfn.JsonPath.task_token}),
             timeout=cdk.Duration.hours(24), result_path="$.approval")
         finalize = invoke("Finalize", compute.finalize,

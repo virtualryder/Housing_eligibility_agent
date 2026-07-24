@@ -21,7 +21,7 @@ jobs:
         run: python lib/verify_core.py
 
       - name: Install tooling
-        run: python -m pip install --quiet "pyyaml==6.0.3" "boto3==1.43.51" "pytest==9.1.1" "ruff==0.15.22" "aws-cdk-lib>=2.150" "constructs>=10.0"
+        run: python -m pip install --quiet "pyyaml==6.0.3" "boto3==1.43.51" "pytest==9.1.1" "ruff==0.15.22" "aws-cdk-lib>=2.150" "constructs>=10.0" "bandit==1.8.6"
 
       - name: Render manifest (validates the single source of truth)
         run: python lib/engine/render.py agents/housing-assistance/manifest.yaml "$RUNNER_TEMP/build"
@@ -31,6 +31,8 @@ jobs:
 
       - name: Lint (bug-class checks)
         run: ruff check --select E9,F63,F7,F82 agents lib tests
+      - name: bandit (SAST, blocking on medium+)
+        run: python -m bandit -r agents/housing-assistance/tools lib/controls lib/runtime cdk/housing_stacks --severity-level medium --confidence-level medium -q
 
   supply-chain:
     name: dependency audit · SBOM
