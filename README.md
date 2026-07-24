@@ -24,8 +24,9 @@ the pharmacovigilance, benefits, and financial-aid agents, from a reusable, mani
 ## Production-grade build (P0 hardening — 2026-07)
 
 This repo is the portfolio's **lead agent** being taken to pilot-readiness under
-[`PRODUCTION-PLAN.md`](PRODUCTION-PLAN.md). The following are **built and offline-proven (97 tests
-green)**, closing the external deep-review's P0 findings:
+[`PRODUCTION-PLAN.md`](PRODUCTION-PLAN.md). The following are **built and offline-proven (117 tests
+green)** — and the two highest-stakes claims are now also **live-proven with captured evidence**
+(see *Validated evidence* below) — closing the external deep-review's P0 findings:
 
 - **De-identification is proven, not asserted (P0-1).** `mask_pii` mints a server-signed
   `sanitized_ref` over the exact masked content; every downstream tool verifies it fail-closed and
@@ -45,8 +46,33 @@ green)**, closing the external deep-review's P0 findings:
   incl. COMPLIANCE mode (P0-12, [`docs/RETENTION-PROFILES.md`](docs/RETENTION-PROFILES.md));
   **data-source policy** (correctness over availability, [`docs/DATA-SOURCE-POLICY.md`](docs/DATA-SOURCE-POLICY.md));
   **threat model** ([`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md)); **pilot scope**
-  ([`PILOT-SCOPE.md`](PILOT-SCOPE.md)); release evidence template
-  ([`VALIDATED_RELEASE.md`](VALIDATED_RELEASE.md) — live capture staged for the CDK validation run).
+  ([`PILOT-SCOPE.md`](PILOT-SCOPE.md)); captured release evidence
+  ([`VALIDATED_RELEASE.md`](VALIDATED_RELEASE.md)).
+
+### Validated evidence (live runs, captured — 2026-07)
+
+Two clean-account validation runs, both fully torn down afterward, with the raw captures committed
+under [`evidence/`](evidence/):
+
+- **The full governed pipeline SUCCEEDED end-to-end on live services**
+  ([`evidence/GA-4-LIVE-HAPPY-PATH.md`](evidence/GA-4-LIVE-HAPPY-PATH.md)): live HUD USER income-limit
+  lookup with HMAC-signed provenance verified by the guard; real Comprehend masking with a Secrets
+  Manager–signed `sanitized_ref`; deterministic AMI assessment; a real guarded Bedrock notice; the
+  hash-chained WORM `INTENT` record; the `waitForTaskToken` human sign-off pause with a `content_hash`
+  binding the approval to the exact assessment; and an **exactly-once** finalize
+  (`FINAL#<case>` conditional marker). The agent never self-adjudicated.
+- **The AgentCore Gateway/Cedar authorization plane deploys as pure IaC and reached
+  `CREATE_COMPLETE` in `ENFORCE`** (same evidence file, addendum): the CDK `GatewayStack` custom
+  resource created the Cedar policy engine, the MCP gateway (CUSTOM_JWT via the Cognito identity
+  pool), all 9 manifest-synthesized tool targets on exact Lambda ARNs, and all 7 deny-by-default
+  Cedar policies — then flipped to ENFORCE; stack delete reversed everything (verified zero residue).
+- **Fail-closed behavior proven in the cloud**
+  ([`evidence/P0-11-VALIDATION-RUN.md`](evidence/P0-11-VALIDATION-RUN.md)): forged signature / spoofed
+  `deidentified:true` / mutated content all refused; a source-down HUD lookup routed to
+  `ManualReview` — no determination on unverifiable data.
+- **Validation found real defects** — eight live findings across the runs (IAM/AgentCore API
+  constraints, an orphaned-engine conflict, a CloudFormation async-invoke stall) — every one fixed,
+  regression-tested, and documented in the evidence. That is what the validation step is for.
 
 ---
 

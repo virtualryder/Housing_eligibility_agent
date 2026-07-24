@@ -175,7 +175,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   const s = p.addSlide(); bg(s, CLOUD);
   eyebrow(s, "Where it stands today");
   title(s, "Proven end-to-end on AWS — not a slideware demo");
-  const stats = [["30/30", "governance checks pass, live", MINT], ["AMI-based", "eligibility computed deterministically", TEAL], ["100%", "of determinations gated by a specialist", AMBER]];
+  const stats = [["117/117", "automated tests green in CI", MINT], ["End-to-end", "governed pipeline proven live on AWS", TEAL], ["100%", "of determinations gated by a specialist", AMBER]];
   const sw = 3.9, gap = 0.2, x0 = 0.62, y = 1.55;
   stats.forEach((st, i) => {
     const x = x0 + i * (sw + gap);
@@ -184,14 +184,14 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
     s.addText(st[1], { x: x + 0.1, y: y + 0.85, w: sw - 0.2, h: 0.42, align: "center", fontFace: BF, fontSize: 11.5, color: "44535F", lineSpacingMultiple: 1.0, margin: 0 });
   });
   card(s, 0.62, 3.2, 12.1, 3.0, CARD, 0.1);
-  s.addText("Demonstrated live, in enforcement mode:", { x: 0.95, y: 3.42, w: 11.4, h: 0.4, fontFace: BF, fontSize: 13.5, bold: true, color: NAVY, margin: 0 });
+  s.addText("Validated live in your deployment path (AWS CDK), enforcement on — evidence captured in the repo:", { x: 0.95, y: 3.42, w: 11.4, h: 0.4, fontFace: BF, fontSize: 13.5, bold: true, color: NAVY, margin: 0 });
   const proofs = [
-    "A real, de-identified determination notice drafted by the model",
-    "PII (name, SSN, address) removed before the model — fail-closed",
-    "A live, authoritative HUD income-limit lookup, stamped with provenance",
+    "The full governed workflow ran end-to-end live — intake to committed determination",
+    "PII removed before the model — fail-closed, and cryptographically proven downstream",
+    "A live, authoritative HUD income-limit lookup with a verified provenance signature",
     "The agent blocked from committing a determination — every time",
-    "A different specialist required to approve; approvals are single-use",
-    "Tamper-proof audit written for each step; duplicates rejected",
+    "A different specialist approves; the approval is bound to the exact case content and finalizes exactly once",
+    "Tamper-evident (hash-chained) audit of every step; the authorization gateway deploys as code, in ENFORCE",
   ];
   const cw = 5.5, cx = [0.98, 6.9];
   proofs.forEach((t, i) => {
@@ -201,7 +201,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
     s.addText(t, { x: x + 0.44, y: yy - 0.08, w: cw, h: 0.5, valign: "middle", fontFace: BF, fontSize: 12.5, color: INK, lineSpacingMultiple: 1.02, margin: 0 });
   });
   footer(s, 7);
-  s.addNotes("Reproducible and enforced. The income-vs-AMI engine is deterministic and transparent, so a housing specialist can defend each determination at an informal hearing.");
+  s.addNotes("Reproducible and enforced. Two clean-account validation runs are captured in the repo (evidence/): the full governed pipeline SUCCEEDED live on real services, and the Cedar authorization gateway reached CREATE_COMPLETE in ENFORCE as pure infrastructure-as-code. The income-vs-AMI engine is deterministic and transparent, so a housing specialist can defend each determination at an informal hearing.");
 })();
 
 /* 8. DIVISION OF RESPONSIBILITY */
@@ -261,7 +261,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   s.addText("A scoped pilot on synthetic data — in your account", { x: 0.6, y: 0.45, w: 12, h: 0.85, fontFace: TF, fontSize: 26, bold: true, color: WHITE, margin: 0 });
   s.addText("Low-risk, boundary-explicit, and reversible. We stand the pattern up on synthetic applications in your AWS environment, prove the controls with your compliance and privacy teams, then scope what a validated production deployment would take.",
     { x: 0.62, y: 1.45, w: 11.6, h: 0.9, fontFace: BF, fontSize: 14.5, color: ICE, lineSpacingMultiple: 1.16, margin: 0 });
-  const steps = [["1", "Workshop", "Walk your housing-program, privacy, and security teams through the architecture and the live 30-check proof.", "~1 week"], ["2", "Scoped pilot", "Deploy to your account on synthetic applications; run cases end-to-end through the governed workflow.", "4–6 weeks"], ["3", "Validation scope", "Define the authoritative admission rules, connectors, and authorization a production deployment would require.", "Joint plan"]];
+  const steps = [["1", "Workshop", "Walk your housing-program, privacy, and security teams through the architecture and the captured validation evidence.", "~1 week"], ["2", "Scoped pilot", "Deploy to your account on synthetic applications; run cases end-to-end through the governed workflow.", "4–6 weeks"], ["3", "Validation scope", "Define the authoritative admission rules, connectors, and authorization a production deployment would require.", "Joint plan"]];
   const w = 3.86, gap = 0.24, x0 = 0.62, y = 2.65, h = 2.55;
   steps.forEach((st, i) => {
     const x = x0 + i * (w + gap);

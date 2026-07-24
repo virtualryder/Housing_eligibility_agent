@@ -217,8 +217,8 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
 (() => {
   const s = p.addSlide(); bg(s, CLOUD);
   eyebrow(s, "Evidence");
-  title(s, "Proof, not slideware: 30 / 30 governance checks, live on AWS");
-  const stats = [["30/30", "governance checks pass", MINT], ["6", "controls native on AgentCore", TEAL], ["3", "regulated controls built & proven", AMBER], ["0", "residual on teardown", NAVY]];
+  title(s, "Proof, not slideware: validated live on AWS, evidence captured");
+  const stats = [["117/117", "automated tests green", MINT], ["2", "clean-account live validation runs captured", TEAL], ["8", "real defects found & fixed by validation", AMBER], ["0", "residual on teardown", NAVY]];
   const sw = 2.9, gap = 0.23, x0 = 0.62, y = 1.5;
   stats.forEach((st, i) => {
     const x = x0 + i * (sw + gap);
@@ -227,16 +227,16 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
     s.addText(st[1], { x: x + 0.1, y: y + 0.85, w: sw - 0.2, h: 0.42, align: "center", fontFace: BF, fontSize: 11.5, color: "44535F", margin: 0 });
   });
   card(s, 0.62, 3.15, 12.1, 3.05, CARD, 0.1);
-  s.addText("Every one of these ran live, in ENFORCE mode, and each denial names the exact Cedar policy that fired:", { x: 0.95, y: 3.35, w: 11.4, h: 0.4, fontFace: BF, fontSize: 13, bold: true, color: NAVY, margin: 0 });
+  s.addText("Captured in the repo (evidence/), run on the customer deployment path (AWS CDK) and torn down clean:", { x: 0.95, y: 3.35, w: 11.4, h: 0.4, fontFace: BF, fontSize: 13, bold: true, color: NAVY, margin: 0 });
   const proofs = [
-    "Deny-by-default — housing specialist ALLOW, outsider DENY",
-    "Live HUD income-limit lookup with provenance (authoritative)",
-    "Mask-before-assess & mask-before-draft — un-masked processing forbidden",
-    "No-self-commit — the agent can't finalize a determination",
-    "Real PII masking (Comprehend, fail-closed): name + SSN",
-    "Deterministic AMI income-category + targeting engine",
-    "Real Bedrock determination notice through a Guardrail",
-    "Immutable WORM audit + human sign-off (approver ≠ requester)",
+    "Full governed pipeline SUCCEEDED live — intake to committed determination",
+    "Live HUD income-limit lookup; provenance signature verified by the workflow",
+    "Real PII masking (Comprehend), cryptographically proven fail-closed downstream",
+    "Deterministic AMI engine; real Bedrock notice through a Guardrail",
+    "Cedar authorization gateway deployed as pure IaC — CREATE_COMPLETE in ENFORCE",
+    "No-self-commit — the agent can't finalize; deny-by-default holds",
+    "Human sign-off: approver ≠ requester, approval hash-bound to the exact case",
+    "Hash-chained WORM audit + exactly-once finalization (replay-safe)",
   ];
   const cw = 5.55, cx = [0.98, 6.9];
   proofs.forEach((t, i) => {
@@ -246,7 +246,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
     s.addText(t, { x: x + 0.44, y: yy - 0.05, w: cw, h: 0.44, valign: "middle", fontFace: BF, fontSize: 12, color: INK, margin: 0 });
   });
   footer(s, 8);
-  s.addNotes("A reproducible, one-command demo stands the stack up, proves 30 checks in ENFORCE — including the live HUD income-limit lookup, the step-two recertify/overpayment workflows, and the no-self-fraud-referral forbid — and tears down with zero residual. The Runtime invoke (housing specialist full workflow, outsider denied) was also proven live.");
+  s.addNotes("Two clean-account validation runs are captured in evidence/ and referenced from VALIDATED_RELEASE.md: the full governed pipeline SUCCEEDED end-to-end on live services (HUD, Comprehend, Secrets Manager, Bedrock, WORM, sign-off, exactly-once finalize), and the AgentCore/Cedar gateway attachment reached CREATE_COMPLETE in ENFORCE as pure CDK IaC. Validation surfaced 8 real defects — every one fixed and regression-tested, which is the point of validating. Zero residual on teardown.");
 })();
 
 /* 9. RUNTIME + IDENTITY */
@@ -371,7 +371,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
     s.addText(v[2], { x: x + w / 2 - 0.6, y: y + 1.36, w: 1.2, h: 0.3, align: "center", valign: "middle", color: NAVY, fontFace: BF, fontSize: 10, bold: true, margin: 0 });
   });
   s.addText("THE ASK", { x: 0.62, y: 4.65, w: 4, h: 0.35, fontFace: BF, fontSize: 12.5, bold: true, color: MINT, charSpacing: 2, margin: 0 });
-  const asks = [["1", "Internal demo", "Stand up the stack live and walk leadership through the 30-check proof."], ["2", "Government workshops", "Take the pattern to housing-authority and SLG accounts as a reference architecture."], ["3", "Scoped pilot", "A pilot on synthetic applications with a named housing authority, boundary made explicit."]];
+  const asks = [["1", "Internal demo", "Stand up the stack live and walk leadership through the captured validation evidence."], ["2", "Government workshops", "Take the pattern to housing-authority and SLG accounts as a reference architecture."], ["3", "Scoped pilot", "A pilot on synthetic applications with a named housing authority, boundary made explicit."]];
   asks.forEach((a, i) => {
     const x = 0.62 + i * 4.06;
     circle(s, x, 5.15, 0.5, MINT, a[0], NAVY, 16);

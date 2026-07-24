@@ -2,6 +2,14 @@
 
 *Captured live against the deployed agent (us-east-1) with Cedar in **ENFORCE**, 2026-07. Account id is the live deploy; the public repo scrubs it. Together with the red-team harness (`bash lib/engine/redteam.sh agents/housing-assistance`, governance-holds-under-attack), this is the portfolio depth pack applied to this vertical.*
 
+> **Production-build validation evidence (2026-07, newer):** the P0-hardened build was additionally
+> validated on the **CDK customer deployment path** in two captured clean-account runs — the full
+> governed pipeline SUCCEEDED end-to-end on live services (exactly-once finalize, content-hash-bound
+> approval), and the AgentCore Gateway/Cedar attachment reached `CREATE_COMPLETE` in **ENFORCE** as
+> pure IaC. See [`../evidence/GA-4-LIVE-HAPPY-PATH.md`](../evidence/GA-4-LIVE-HAPPY-PATH.md),
+> [`../evidence/P0-11-VALIDATION-RUN.md`](../evidence/P0-11-VALIDATION-RUN.md), and
+> [`../VALIDATED_RELEASE.md`](../VALIDATED_RELEASE.md).
+
 ---
 
 ## Item 1 — End-to-end agent runtime trace (Observability / X-Ray)

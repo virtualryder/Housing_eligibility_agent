@@ -56,7 +56,7 @@ const body = [
     ["Access controls (AC family)", "Deny-by-default Cedar authorization at the Gateway; authenticated identity via Cognito/IdP; least-privilege permits scoped to the housing-specialist group.", "Live in ENFORCE; authority federates its IdP and maps roles."],
     ["Encryption & data protection (SC family)", "PII is masked before any model call; the audit copy is Object-Lock protected; runs inside the authority's account.", [{ text: "Authority: ", bold: true }, "KMS keys, TLS, and network segmentation."]],
     ["Audit & accountability (AU family)", "Immutable WORM audit of every decision and state change, with identity-tagged, OTel-correlated logs.", "Live; authority sets retention and log aggregation."],
-    ["Reproducible control evidence (CA/SA)", "Reproducible, manifest-driven infrastructure-as-code and a 30-check governance test harness that runs in enforcement mode.", [{ text: "Authority: ", bold: true }, "the StateRAMP / NIST 800-53 control set, the SSP, and the authorization to operate."]],
+    ["Reproducible control evidence (CA/SA)", "Reproducible AWS CDK infrastructure-as-code, a 117-test automated suite gating every change in CI, and captured clean-account validation runs (the full governed workflow live end-to-end; the Cedar authorization gateway deployed as code in enforcement mode) committed in the repo's evidence/ folder.", [{ text: "Authority: ", bold: true }, "the StateRAMP / NIST 800-53 control set, the SSP, and the authorization to operate."]],
   ], [2500, 4240, 3700]),
 
   H1("7. Separation of duties & the human sign-off gate"),
@@ -77,7 +77,7 @@ const body = [
     ["The human sign-off workflow (separation of duties)", "Validated connectors to the PHA system of record (EIV / PIC / HMIS)"],
     ["The deterministic eligibility rules engine (illustrative defaults)", "The authoritative admission rules, local preferences, and their legal review"],
     ["The live HUD income-limit integration + the immutable WORM audit design", "Record-retention policy and program-review / hearing readiness"],
-    ["Reproducible IaC + the 30-check governance harness", "Computer-system validation and the StateRAMP / NIST 800-53 control package"],
+    ["Reproducible CDK IaC + the automated test suite + captured validation evidence", "Computer-system validation and the StateRAMP / NIST 800-53 control package"],
     ["Documentation (this guide, the runbook, maintenance)", "Notice language, informal-hearing rights, and the applicant appeal process"],
   ], [5220, 5220]),
 
