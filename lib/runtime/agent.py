@@ -14,6 +14,8 @@ from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 from mcp.client.streamable_http import streamablehttp_client
 
+import token_boundary  # P0-3: trusted runtime credential boundary (bundled beside this file)
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s agent %(message)s")
 log = logging.getLogger("agent")
 
@@ -31,7 +33,9 @@ SYSTEM = os.environ.get("SYSTEM_PROMPT") or (
     "are exposed via a governed gateway; every call is authorized by policy against the human identity "
     "you act for. Use the available tools in a sensible order, never commit a consequential submission "
     "directly (that is owned by the human sign-off gate), and if any tool is denied by policy, STOP and "
-    "report exactly which control blocked you. End with a short summary and the sign-off status."
+    "report exactly which control blocked you. NEVER include credentials, tokens, or secrets in any tool "
+    "argument — the sign-off requester identity is attached automatically by the runtime. End with a "
+    "short summary and the sign-off status."
 )
 
 
@@ -66,6 +70,10 @@ def invoke(payload, context=None):
 
     model = BedrockModel(model_id=MODEL_ID, region_name=REGION, temperature=0.2)
     mcp_client = MCPClient(lambda: streamablehttp_client(gw, headers={"Authorization": "Bearer %s" % token}))
+    # P0-3: the runtime is the credential boundary. Model-supplied credential-shaped args are scrubbed
+    # from EVERY tool call, and the runtime-held access token is injected out-of-band into the sign-off
+    # call only — the model never sees, produces, or transports a bearer token.
+    token_boundary.wrap_mcp_client(mcp_client, token)
     with mcp_client:
         tools = mcp_client.list_tools_sync()
         names = [getattr(t, "tool_name", str(t)) for t in tools]

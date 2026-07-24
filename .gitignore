@@ -25,3 +25,9 @@ docs/*.pdf
 
 # Node deps for docs/generators
 node_modules/
+
+# CDK synth/build outputs
+cdk/cdk.out/
+cdk/.build/
+__pycache__/
+*.pyc

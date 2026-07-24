@@ -1,6 +1,7 @@
 import json
 
 import provenance  # shared verifier (bundled beside this handler at deploy; on sys.path in tests)
+import sanitized   # server-issued sanitized-artifact verification (P0-1)
 
 # assess_housing_eligibility — deterministic Housing Choice Voucher (Section 8) income-eligibility
 # determination. NO licensed data and NO model call: a rules engine over the PUBLIC HUD income-limit
@@ -59,11 +60,15 @@ def _parse_il_source(raw):
 
 def handler(event, context):
     e = _coerce(event)
-    # Fail-closed: refuse to operate on non-de-identified input. Cedar's mask_before_assess forbid blocks
-    # this at the gateway; the body refuses too (defense in depth).
-    if e.get("deidentified") is not True:
-        return {"assessed": False, "error": "refused: case is not de-identified (deidentified must be true)",
-                "deidentified_input": e.get("deidentified")}
+    # P0-1 fail-closed: de-identification must be PROVEN by a mask_pii-signed sanitized_ref — a
+    # caller/model-supplied `deidentified: true` boolean is NOT accepted as proof (it remains only the
+    # coarse Cedar gateway gate). Missing/forged/tampered ref -> refuse.
+    if not sanitized.verify_ref(e.get("sanitized_ref")):
+        return {"assessed": False,
+                "error": ("refused: de-identification not proven — a valid sanitized_ref signed by "
+                          "mask_pii is required; a deidentified boolean is not accepted as proof (P0-1)"),
+                "deidentified_input": e.get("deidentified"),
+                "sanitized_ref_verified": False}
 
     income = _num(e.get("annual_income"))
     hh = e.get("household_size")

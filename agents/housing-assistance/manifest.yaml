@@ -43,6 +43,9 @@ controls:
   human_signoff_gate: true
 
 audit:
+  # SANDBOX DEMO PROFILE ONLY (P0-12). Real deployments select a profile from docs/RETENTION-PROFILES.md
+  # (e.g. COMPLIANCE + the applicable state housing records-management schedule) via the
+  # OBJECT_LOCK_MODE_OVERRIDE / RETENTION_DAYS_OVERRIDE env at deploy, or the CDK retention context.
   object_lock_mode: GOVERNANCE
   retention_days: 1
 
@@ -82,7 +85,7 @@ tools:
     kind: control
     mcp_tools:
       - name: mask_pii
-        description: "Fail-closed PII de-identification of a housing applicant record (name, SSN, address, DOB, etc.); sets deidentified=true only if masking succeeded."
+        description: "Fail-closed PII de-identification of a housing applicant record (name, SSN, address, DOB, etc.). On success returns a SIGNED sanitized_ref (server-issued proof over the exact masked content) — pass that ref (as JSON) to assess/recertify/detect_overpayment/draft_notice; the deidentified boolean alone is never accepted as proof (P0-1)."
         input: { case: { type: string, description: "Housing applicant record text that may contain PII." } }
         required: [case]
 
@@ -100,8 +103,9 @@ tools:
           il50: { type: number, description: "HUD very-low (50% AMI) limit for this household size, from lookup_income_limit." }
           il80: { type: number, description: "HUD low (80% AMI) limit for this household size, from lookup_income_limit." }
           il_source: { type: string, description: "Provenance of the income limits (e.g. from lookup_income_limit), echoed into the determination for the audit trail." }
-          deidentified: { type: boolean, description: "True if masked by mask_pii." }
-        required: [deidentified]
+          deidentified: { type: boolean, description: "True if masked by mask_pii (coarse Cedar gate only; not accepted as proof)." }
+          sanitized_ref: { type: string, description: "The signed sanitized-artifact reference JSON returned by mask_pii — REQUIRED server-verified proof that masking produced this case (P0-1)." }
+        required: [deidentified, sanitized_ref]
 
   - target: recertify
     lambda: hou-recertify
@@ -117,8 +121,9 @@ tools:
           il80: { type: number, description: "HUD low (80% AMI) limit for this household size." }
           prior_eligible: { type: boolean, description: "The prior determination's eligibility (or supply prior_determination)." }
           prior_determination: { type: string, description: "Prior determination string (ELIGIBLE/INELIGIBLE) if prior_eligible not given." }
-          deidentified: { type: boolean, description: "True if masked by mask_pii." }
-        required: [deidentified]
+          deidentified: { type: boolean, description: "True if masked by mask_pii (coarse Cedar gate only; not accepted as proof)." }
+          sanitized_ref: { type: string, description: "The signed sanitized-artifact reference JSON returned by mask_pii — REQUIRED server-verified proof of masking (P0-1)." }
+        required: [deidentified, sanitized_ref]
 
   - target: detect-overpayment
     lambda: hou-detect-overpayment
@@ -131,8 +136,9 @@ tools:
           prior_monthly_subsidy: { type: number, description: "Monthly housing-assistance payment actually made." }
           corrected_monthly_subsidy: { type: number, description: "Monthly subsidy that should have been paid under corrected facts." }
           months: { type: integer, description: "Number of months the error persisted." }
-          deidentified: { type: boolean, description: "True if masked by mask_pii." }
-        required: [deidentified]
+          deidentified: { type: boolean, description: "True if masked by mask_pii (coarse Cedar gate only; not accepted as proof)." }
+          sanitized_ref: { type: string, description: "The signed sanitized-artifact reference JSON returned by mask_pii — REQUIRED server-verified proof of masking (P0-1)." }
+        required: [deidentified, sanitized_ref]
 
   - target: hou-core
     lambda: hou-core-tools
@@ -141,11 +147,13 @@ tools:
     guardrailed: true
     mcp_tools:
       - name: draft_notice
-        description: "Draft a de-identified housing-eligibility determination notice; case must be masked first."
+        description: "Draft a de-identified housing-eligibility determination notice. Requires the mask_pii-signed sanitized_ref; the case text is HASH-BOUND to that signed artifact (substituted/unmasked content is refused) and is preferentially loaded from the server-side artifact store."
         input:
-          case: { type: string, description: "De-identified case + eligibility determination JSON/text." }
-          deidentified: { type: boolean, description: "True if masked by mask_pii." }
-        required: [case, deidentified]
+          case: { type: string, description: "The EXACT masked_case returned by mask_pii (must hash to the signed artifact digest; optional when the artifact store is configured)." }
+          determination: { type: string, description: "Non-PII eligibility determination JSON/text from assess_housing_eligibility to include in the notice." }
+          deidentified: { type: boolean, description: "True if masked by mask_pii (coarse Cedar gate only; not accepted as proof)." }
+          sanitized_ref: { type: string, description: "The signed sanitized-artifact reference JSON returned by mask_pii — REQUIRED server-verified proof of masking + content binding (P0-1)." }
+        required: [deidentified, sanitized_ref]
       - name: finalize_determination
         description: "Commit a housing-eligibility determination; agent must never call this directly."
         input: { case_id: { type: string, description: "Case/record id." } }
@@ -176,11 +184,10 @@ tools:
     kind: control
     mcp_tools:
       - name: request_signoff
-        description: "Request housing-specialist sign-off before committing a determination; starts a separation-of-duties approval workflow. The agent can never commit directly."
+        description: "Request housing-specialist sign-off before committing a determination; starts a separation-of-duties approval workflow. The agent can never commit directly. The requester identity is attached AUTOMATICALLY at the trusted runtime boundary (P0-3) — never supply credentials or tokens as arguments."
         input:
           icsr_id: { type: string, description: "Case/record id." }
-          access_token: { type: string, description: "The requester's validated Cognito access token; the requester identity is derived from it (P0-5), never from a name field." }
-        required: [icsr_id, access_token]
+        required: [icsr_id]
 
 policies:
   - { name: housing_specialist_permit, kind: permit, role_group: housing_specialist }
@@ -197,9 +204,9 @@ workflow:
   steps:
     - "intake_application - extract the non-PII decision fields (household size, annual income, county entityid) from the raw housing application."
     - "lookup_income_limit - fetch the authoritative HUD income limits (30/50/80% AMI) for the household's county from the HUD USER Income Limits API (non-PII); keep the returned limits and il_source."
-    - "mask_pii - de-identify the raw record; use the returned masked_case for the notice and audit."
-    - "assess_housing_eligibility - on the extracted fields with deidentified true, using the real HUD limits and il_source, determine the income category and voucher eligibility."
-    - "draft_notice - draft the eligibility determination notice, passing the masked case and deidentified true."
+    - "mask_pii - de-identify the raw record; keep BOTH the returned masked_case and the signed sanitized_ref (JSON) — every downstream tool requires the sanitized_ref as proof of masking."
+    - "assess_housing_eligibility - on the extracted fields with deidentified true AND the sanitized_ref from mask_pii, using the real HUD limits and il_source, determine the income category and voucher eligibility."
+    - "draft_notice - draft the eligibility determination notice, passing the sanitized_ref, the exact masked_case, the determination, and deidentified true."
     - "write_audit - record an INTENT audit entry for the eligibility determination."
     - "request_signoff - request housing-specialist sign-off to commit (a DIFFERENT qualified person must approve)."
 

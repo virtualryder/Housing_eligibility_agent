@@ -3,6 +3,8 @@ import os
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+import sanitized  # server-issued sanitized-artifact verification + content binding (P0-1)
+
 # Housing core tools behind the `hou-core` Gateway target:
 #   - draft_notice            -> REAL Bedrock (Converse) eligibility determination notice from a de-identified case
 #   - finalize_determination  -> deny-only stub (the human sign-off gate owns the real commit)
@@ -36,12 +38,30 @@ def _coerce(event):
 
 
 def _draft(e):
-    if e.get("deidentified") is not True:
-        return {"error": "refused: case is not de-identified (deidentified must be true)",
-                "drafted_by": None, "deidentified_input": e.get("deidentified")}
-    case = e.get("case", "")
-    if not isinstance(case, str):
-        case = json.dumps(case, ensure_ascii=False)
+    # P0-1: drafting consumes the sanitized TEXT, so it enforces BOTH controls:
+    #   (1) proof-of-masking — a mask_pii-signed sanitized_ref must verify (boolean never accepted);
+    #   (2) content binding — the case text used must hash to the signed digest. Preferred channel is
+    #       the server-side artifact store (content never re-enters the model); a model-passed `case`
+    #       is accepted ONLY if it is byte-identical to the signed masked artifact.
+    ref = sanitized.parse_ref(e.get("sanitized_ref"))
+    if not sanitized.verify_ref(ref):
+        return {"error": ("refused: de-identification not proven — a valid sanitized_ref signed by "
+                          "mask_pii is required; a deidentified boolean is not accepted as proof (P0-1)"),
+                "drafted_by": None, "deidentified_input": e.get("deidentified"),
+                "sanitized_ref_verified": False}
+    raw_case = e.get("case", "")
+    if not isinstance(raw_case, str):
+        raw_case = json.dumps(raw_case, ensure_ascii=False)
+    masked_text = sanitized.load_text(ref, candidate_text=raw_case)
+    if masked_text is None:
+        return {"error": ("refused: case content does not match the signed sanitized artifact "
+                          "(hash mismatch — possible substitution of unmasked or altered content)"),
+                "drafted_by": None, "sanitized_ref_verified": True, "content_bound": False}
+    # Non-PII determination context may accompany the masked case (it carries no applicant identifiers).
+    determination = e.get("determination", "")
+    if not isinstance(determination, str):
+        determination = json.dumps(determination, ensure_ascii=False)
+    case = masked_text if not determination else (masked_text + "\n\nDetermination:\n" + determination)
     kwargs = dict(
         modelId=DRAFT_MODEL_ID,
         system=[{"text": _SYSTEM}],
@@ -74,6 +94,6 @@ def handler(event, context):
         # finalize_determination is never a real inline call — the human sign-off gate owns it.
         return {"error": "refused: finalize_determination must go through the human sign-off gate",
                 "case_id": e.get("case_id"), "committed": False}
-    if "case" in e or "deidentified" in e:
+    if "case" in e or "deidentified" in e or "sanitized_ref" in e:
         return _draft(e)
     return {"ok": True, "received": e, "note": "housing core tool"}

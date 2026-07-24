@@ -14,7 +14,7 @@ import os
 os.environ.setdefault("PROVENANCE_SECRET", "p0-unit-provenance-secret")  # aligns with conftest; before tool import
 
 import pytest  # noqa: E402
-from toolkit import call, CONTROLS  # noqa: E402
+from toolkit import call, CONTROLS, make_sanitized_ref  # noqa: E402
 import sys  # noqa: E402
 sys.path.insert(0, str(CONTROLS))
 import provenance  # noqa: E402
@@ -33,19 +33,20 @@ def _il_source(hh=4, il30=50000, il50=83300, il80=133250, entityid="0603799999",
 
 
 SIGNED = _il_source(**{"hh": 4, **LIMITS})
+REF = make_sanitized_ref()  # P0-1: signed proof of masking for the positive paths
 
 GOLDEN = [
     ("extremely_low",
-     {"annual_income": 40000, "household_size": 4, **LIMITS, "il_source": SIGNED, "deidentified": True},
+     {"annual_income": 40000, "household_size": 4, **LIMITS, "il_source": SIGNED, "deidentified": True, "sanitized_ref": REF},
      {"determination": "ELIGIBLE", "income_category": "EXTREMELY_LOW", "extremely_low_priority": True}),
     ("very_low",
-     {"annual_income": 70000, "household_size": 4, **LIMITS, "il_source": SIGNED, "deidentified": True},
+     {"annual_income": 70000, "household_size": 4, **LIMITS, "il_source": SIGNED, "deidentified": True, "sanitized_ref": REF},
      {"determination": "ELIGIBLE", "income_category": "VERY_LOW", "extremely_low_priority": False}),
     ("low_needs_review",
-     {"annual_income": 100000, "household_size": 4, **LIMITS, "il_source": SIGNED, "deidentified": True},
+     {"annual_income": 100000, "household_size": 4, **LIMITS, "il_source": SIGNED, "deidentified": True, "sanitized_ref": REF},
      {"determination": "NEEDS_REVIEW", "income_category": "LOW"}),
     ("over_income",
-     {"annual_income": 150000, "household_size": 4, **LIMITS, "il_source": SIGNED, "deidentified": True},
+     {"annual_income": 150000, "household_size": 4, **LIMITS, "il_source": SIGNED, "deidentified": True, "sanitized_ref": REF},
      {"determination": "INELIGIBLE", "income_category": "OVER_INCOME", "eligible": False}),
 ]
 
@@ -54,7 +55,7 @@ NEGATIVE = [
      {"annual_income": 40000, "il50": 83300, "deidentified": False},
      lambda r: r["assessed"] is False),
     ("assess_unsigned_limits", "assess_housing_eligibility",
-     {"annual_income": 40000, "household_size": 4, **LIMITS, "deidentified": True},
+     {"annual_income": 40000, "household_size": 4, **LIMITS, "deidentified": True, "sanitized_ref": REF},
      lambda r: r["determination"] == "NEEDS_REVIEW" and r["authoritative"] is False),
     ("recertify_unmasked", "recertify",
      {"annual_income": 40000, "il50": 83300, "il80": 133250, "prior_eligible": True, "deidentified": False},

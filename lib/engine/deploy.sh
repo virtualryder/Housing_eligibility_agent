@@ -82,6 +82,12 @@ source "$AGENT/identity-state.env"     # POOL_ID, CLIENT_ID, DISCOVERY
 log "using stable pool=$POOL_ID client=$CLIENT_ID"
 
 # ---- 2b. WORM audit stores ----
+# P0-12: audit retention is DEPLOY-CONFIGURABLE. Operator env overrides beat the manifest default
+# (GOVERNANCE/1d is a sandbox demo profile ONLY). Reference profiles incl. COMPLIANCE mode and
+# records-schedule durations: docs/RETENTION-PROFILES.md. COMPLIANCE cannot be shortened or bypassed
+# by ANY principal until expiry — use it deliberately.
+OBJECT_LOCK_MODE="${OBJECT_LOCK_MODE_OVERRIDE:-$OBJECT_LOCK_MODE}"
+RETENTION_DAYS="${RETENTION_DAYS_OVERRIDE:-$RETENTION_DAYS}"
 if [ "$CTRL_WORM" = "1" ]; then
   if ! aws dynamodb describe-table --table-name "$AUDIT_TABLE" --region "$REGION" >/dev/null 2>&1; then
     aws dynamodb create-table --table-name "$AUDIT_TABLE" --attribute-definitions AttributeName=audit_id,AttributeType=S --key-schema AttributeName=audit_id,KeyType=HASH --billing-mode PAY_PER_REQUEST $DDB_SSE --region "$REGION" >/dev/null

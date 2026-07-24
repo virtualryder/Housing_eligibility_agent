@@ -18,6 +18,11 @@ for _p in (str(CONTROLS), str(TOOLS)):
 SECRET = os.environ.setdefault("PROVENANCE_SECRET", "p0-unit-provenance-secret")  # aligns with conftest
 
 import provenance  # noqa: E402
+import sanitized as _sanitized  # noqa: E402
+
+def _ref():
+    """P0-1: a genuine signed sanitized_ref so provenance tests exercise the P0-3 gate, not the masking gate."""
+    return json.dumps(_sanitized.mint_ref("[REDACTED:NAME] test case", engine="comprehend:DetectPiiEntities", entities_masked=1))
 
 SOURCE = "US Dept of Housing and Urban Development (HUD USER) — Income Limits"
 
@@ -96,7 +101,7 @@ def _signed_il_source(entityid="0603799999", year="2026", hh=4, il30=30000, il50
 def test_assess_needs_review_without_provenance():
     m = _assess()
     r = m.handler({"annual_income": 40000, "household_size": 4, "il30": 30000, "il50": 50000, "il80": 80000,
-                   "deidentified": True}, None)
+                   "deidentified": True, "sanitized_ref": _ref()}, None)
     assert r["determination"] == "NEEDS_REVIEW"
     assert r["authoritative"] is False and r["eligible"] is None
 
@@ -105,7 +110,7 @@ def test_assess_needs_review_with_fabricated_source_string():
     m = _assess()
     r = m.handler({"annual_income": 40000, "household_size": 4, "il30": 30000, "il50": 50000, "il80": 80000,
                    "il_source": "US Dept of Housing and Urban Development (HUD USER) — Income Limits",
-                   "deidentified": True}, None)
+                   "deidentified": True, "sanitized_ref": _ref()}, None)
     assert r["determination"] == "NEEDS_REVIEW"
     assert r["authoritative"] is False
 
@@ -115,7 +120,7 @@ def test_assess_needs_review_when_limits_tampered_after_signing():
     # genuine token for il50=50000, but the caller passes a LOWER il50 to force eligibility
     src = _signed_il_source(il50=50000)
     r = m.handler({"annual_income": 45000, "household_size": 4, "il30": 30000, "il50": 40000, "il80": 80000,
-                   "il_source": src, "deidentified": True}, None)
+                   "il_source": src, "deidentified": True, "sanitized_ref": _ref()}, None)
     assert r["determination"] == "NEEDS_REVIEW"
     assert r["authoritative"] is False
 
@@ -124,7 +129,7 @@ def test_assess_authoritative_with_signed_source():
     m = _assess()
     src = _signed_il_source(il30=30000, il50=50000, il80=80000)
     r = m.handler({"annual_income": 45000, "household_size": 4, "il30": 30000, "il50": 50000, "il80": 80000,
-                   "il_source": src, "deidentified": True}, None)
+                   "il_source": src, "deidentified": True, "sanitized_ref": _ref()}, None)
     assert r["determination"] == "ELIGIBLE"
     assert r["authoritative"] is True and r["provenance_verified"] is True
     assert r["income_category"] == "VERY_LOW"
@@ -152,7 +157,7 @@ def test_lookup_signs_and_assess_verifies(monkeypatch):
     m = _assess()
     r = m.handler({"annual_income": 60000, "household_size": 4,
                    "il30": out["il30"], "il50": out["il50"], "il80": out["il80"],
-                   "il_source": out["il_source"], "deidentified": True}, None)
+                   "il_source": out["il_source"], "deidentified": True, "sanitized_ref": _ref()}, None)
     assert r["provenance_verified"] is True and r["authoritative"] is True
     assert r["determination"] == "ELIGIBLE"      # 60000 <= il50 73550
 
@@ -164,5 +169,5 @@ def test_lookup_source_down_yields_no_token_then_review(monkeypatch):
     assert out["found"] is False
     # with no lookup output, the agent has no signed il_source; assess must route to review
     m = _assess()
-    r = m.handler({"annual_income": 60000, "household_size": 4, "il50": 73550, "deidentified": True}, None)
+    r = m.handler({"annual_income": 60000, "household_size": 4, "il50": 73550, "deidentified": True, "sanitized_ref": _ref()}, None)
     assert r["determination"] == "NEEDS_REVIEW" and r["authoritative"] is False

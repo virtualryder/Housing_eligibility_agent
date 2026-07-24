@@ -21,6 +21,33 @@ the pharmacovigilance, benefits, and financial-aid agents, from a reusable, mani
 > from HUD; program-specific admission rules and preferences are **configuration** — set per PHA and
 > program.
 
+## Production-grade build (P0 hardening — 2026-07)
+
+This repo is the portfolio's **lead agent** being taken to pilot-readiness under
+[`PRODUCTION-PLAN.md`](PRODUCTION-PLAN.md). The following are **built and offline-proven (97 tests
+green)**, closing the external deep-review's P0 findings:
+
+- **De-identification is proven, not asserted (P0-1).** `mask_pii` mints a server-signed
+  `sanitized_ref` over the exact masked content; every downstream tool verifies it fail-closed and
+  `draft_notice` hash-binds its input to the signed artifact. A model-supplied `deidentified: true`
+  boolean is never accepted (`lib/controls/sanitized.py`, `tests/test_sanitized_artifact.py`).
+- **The model never handles a bearer token (P0-3).** No tool schema declares a credential; the runtime
+  scrubs credential-shaped args from every call and injects the token out-of-band into the sign-off
+  call only (`lib/runtime/token_boundary.py`, `tests/test_token_boundary.py`).
+- **The regulated workflow is deterministic (P0-2).** A Step Functions controller drives
+  intake → verified-HUD-limits → proven-masking → rules → draft → audit → human sign-off, with a
+  machine-verifiable guard between every stage; unverified evidence routes to `ManualReview`
+  (`cdk/housing_stacks/workflow_stack.py`, `lib/controls/workflow_guards.py`).
+- **CDK is the customer deployment path (P0-5/P0-7).** Explicit least-privilege IAM, exact-ARN
+  outputs (no name discovery), parameterized envs — [`cdk/README.md`](cdk/README.md). The shell engine
+  is an internal reference only.
+- **No default credentials in production paths (P0-6);** configurable **audit retention profiles**
+  incl. COMPLIANCE mode (P0-12, [`docs/RETENTION-PROFILES.md`](docs/RETENTION-PROFILES.md));
+  **data-source policy** (correctness over availability, [`docs/DATA-SOURCE-POLICY.md`](docs/DATA-SOURCE-POLICY.md));
+  **threat model** ([`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md)); **pilot scope**
+  ([`PILOT-SCOPE.md`](PILOT-SCOPE.md)); release evidence template
+  ([`VALIDATED_RELEASE.md`](VALIDATED_RELEASE.md) — live capture staged for the CDK validation run).
+
 ---
 
 ## Why this agent

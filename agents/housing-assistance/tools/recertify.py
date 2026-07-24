@@ -1,5 +1,7 @@
 import json
 
+import sanitized  # server-issued sanitized-artifact verification (P0-1)
+
 # recertify — annual/interim RE-CERTIFICATION. Housing Choice Voucher and public-housing tenants are
 # re-examined periodically (and on interim income changes). Re-runs the deterministic income-eligibility
 # rules on NEW facts and compares to the prior determination to classify the change. The governance
@@ -32,9 +34,12 @@ def _num(v, default=None):
 
 def handler(event, context):
     e = _coerce(event)
-    if e.get("deidentified") is not True:
-        return {"recertified": False, "error": "refused: case is not de-identified (deidentified must be true)",
-                "deidentified_input": e.get("deidentified")}
+    # P0-1: proof of masking is a mask_pii-signed sanitized_ref; a bare boolean is never accepted.
+    if not sanitized.verify_ref(e.get("sanitized_ref")):
+        return {"recertified": False,
+                "error": ("refused: de-identification not proven — a valid sanitized_ref signed by "
+                          "mask_pii is required; a deidentified boolean is not accepted as proof (P0-1)"),
+                "deidentified_input": e.get("deidentified"), "sanitized_ref_verified": False}
 
     income = _num(e.get("annual_income"))
     il50 = _num(e.get("il50"))

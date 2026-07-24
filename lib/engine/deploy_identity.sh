@@ -21,8 +21,19 @@ if [ "$CLIENT_ID" = "None" ] || [ -z "$CLIENT_ID" ]; then
   CLIENT_ID="$(aws cognito-idp create-user-pool-client --user-pool-id "$POOL_ID" --client-name "$CLIENT_NAME" --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH --region "$REGION" --query UserPoolClient.ClientId --output text)"; log "created app client"
 fi
 aws cognito-idp create-group --user-pool-id "$POOL_ID" --group-name "$REVIEWER_GROUP" --region "$REGION" >/dev/null 2>&1 || true
+# P0-6: built-in users with placeholder passwords are a SANDBOX-ONLY convenience. Deploying a
+# `ChangeMe-*` password requires an explicit SANDBOX_IDENTITY=1 acknowledgment; production identity is
+# federated IdP (see docs/IdP-Federation-Reference.md) or operator-supplied secrets — never defaults.
 while IFS=$'\t' read -r un pw grp; do
   [ -z "$un" ] && continue
+  case "$pw" in ChangeMe-*)
+    if [ "${SANDBOX_IDENTITY:-0}" != "1" ]; then
+      log "REFUSED (P0-6): user '$un' has a placeholder password. Set a real password via env/users.tsv,"
+      log "or acknowledge a sandbox-only deploy with SANDBOX_IDENTITY=1. Production uses IdP federation."
+      exit 1
+    fi
+    log "sandbox-only user '$un' (SANDBOX_IDENTITY=1 acknowledged — rotate before any shared use)";;
+  esac
   aws cognito-idp admin-create-user --user-pool-id "$POOL_ID" --username "$un" --message-action SUPPRESS --region "$REGION" >/dev/null 2>&1 || true
   aws cognito-idp admin-set-user-password --user-pool-id "$POOL_ID" --username "$un" --password "$pw" --permanent --region "$REGION" >/dev/null 2>&1 || true
   [ "$grp" = "yes" ] && aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL_ID" --username "$un" --group-name "$REVIEWER_GROUP" --region "$REGION" >/dev/null 2>&1 || true

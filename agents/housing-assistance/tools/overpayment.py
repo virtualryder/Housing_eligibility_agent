@@ -1,5 +1,7 @@
 import json
 
+import sanitized  # server-issued sanitized-artifact verification (P0-1)
+
 # detect_overpayment — deterministic housing-assistance overpayment calculation. Given the monthly
 # Housing Assistance Payment (HAP subsidy) actually paid and the subsidy that SHOULD have been paid
 # under corrected income/facts, over a number of months, compute the overpayment. NO model. Governance
@@ -29,9 +31,12 @@ def _num(v, default=None):
 
 def handler(event, context):
     e = _coerce(event)
-    if e.get("deidentified") is not True:
-        return {"computed": False, "error": "refused: case is not de-identified (deidentified must be true)",
-                "deidentified_input": e.get("deidentified")}
+    # P0-1: proof of masking is a mask_pii-signed sanitized_ref; a bare boolean is never accepted.
+    if not sanitized.verify_ref(e.get("sanitized_ref")):
+        return {"computed": False,
+                "error": ("refused: de-identification not proven — a valid sanitized_ref signed by "
+                          "mask_pii is required; a deidentified boolean is not accepted as proof (P0-1)"),
+                "deidentified_input": e.get("deidentified"), "sanitized_ref_verified": False}
 
     prior = _num(e.get("prior_monthly_subsidy"))
     corrected = _num(e.get("corrected_monthly_subsidy"), 0.0)

@@ -27,3 +27,11 @@ def load(name):
 
 def call(name, event):
     return load(name).handler(event, None)
+
+
+def make_sanitized_ref(text="[REDACTED:NAME] household of 4, income 40000, county 0603799999"):
+    """Mint a GENUINE mask_pii-style sanitized_ref (P0-1) for tests, as the JSON string it crosses the
+    gateway as. Requires PROVENANCE_SECRET in env (set by the test modules before import)."""
+    import json
+    import sanitized
+    return json.dumps(sanitized.mint_ref(text, engine="comprehend:DetectPiiEntities", entities_masked=1))

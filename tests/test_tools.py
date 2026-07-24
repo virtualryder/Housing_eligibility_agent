@@ -4,10 +4,12 @@ import os
 
 os.environ.setdefault("PROVENANCE_SECRET", "p0-unit-provenance-secret")  # aligns with conftest; before tool import
 
-from toolkit import call, CONTROLS  # noqa: E402
+from toolkit import call, CONTROLS, make_sanitized_ref  # noqa: E402
 import sys  # noqa: E402
 sys.path.insert(0, str(CONTROLS))
 import provenance  # noqa: E402
+
+REF = make_sanitized_ref()  # P0-1: genuine signed sanitized_ref for the positive paths
 
 SOURCE = "US Dept of Housing and Urban Development (HUD USER) — Income Limits"
 
@@ -38,7 +40,7 @@ def test_assess_unsigned_limits_go_to_review():
     r = call("assess_housing_eligibility", {"annual_income": 40000, "household_size": 4,
                                             "il30": 50000, "il50": 83300, "il80": 133250,
                                             "il_source": "US Dept of Housing and Urban Development (HUD USER)",
-                                            "deidentified": True})
+                                            "deidentified": True, "sanitized_ref": REF})
     assert r["determination"] == "NEEDS_REVIEW"
     assert r["authoritative"] is False
     assert r["provenance_verified"] is False
@@ -50,7 +52,7 @@ def test_assess_verified_extremely_low_priority():
     r = call("assess_housing_eligibility", {"annual_income": 40000, "household_size": 4,
                                             "il30": 50000, "il50": 83300, "il80": 133250,
                                             "il_source": _signed_il_source(il30=50000, il50=83300, il80=133250),
-                                            "deidentified": True})
+                                            "deidentified": True, "sanitized_ref": REF})
     assert r["determination"] == "ELIGIBLE"
     assert r["authoritative"] is True
     assert r["income_category"] == "EXTREMELY_LOW"
@@ -59,14 +61,14 @@ def test_assess_verified_extremely_low_priority():
 
 def test_recertify_adverse_advance_notice():
     r = call("recertify", {"annual_income": 150000, "household_size": 4, "il50": 83300, "il80": 133250,
-                           "prior_eligible": True, "deidentified": True})
+                           "prior_eligible": True, "deidentified": True, "sanitized_ref": REF})
     assert r["change_type"] == "ADVERSE"
     assert r["advance_notice_required"] is True
 
 
 def test_overpayment_math():
     r = call("overpayment", {"prior_monthly_subsidy": 900, "corrected_monthly_subsidy": 600,
-                             "months": 6, "deidentified": True})
+                             "months": 6, "deidentified": True, "sanitized_ref": REF})
     assert r["classification"] == "OVERPAYMENT"
     assert r["overpayment_amount"] == 1800.0
 
