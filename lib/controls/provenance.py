@@ -44,16 +44,42 @@ _DOMAINS = {
 }
 
 
+_kv_cache = {}   # R3-5: SecretsManager VersionId per ARN — stamped into tokens for rotation forensics
+
+
 def _sm(arn):
-    """Secrets Manager fetch, cached for the Lambda lifetime; unreadable -> b'' (fail-closed)."""
+    """Secrets Manager fetch, cached for the Lambda lifetime; unreadable -> b'' (fail-closed).
+    Captures the secret VERSION id (R3-5) so every token records which key version signed it."""
     if arn not in _sm_cache:
         try:
             import boto3
             r = boto3.client("secretsmanager").get_secret_value(SecretId=arn)
             _sm_cache[arn] = (r.get("SecretString") or "").encode("utf-8")
+            _kv_cache[arn] = r.get("VersionId", "")
         except Exception:
             return b""   # fail-closed: unreadable secret -> nothing is authoritative (NOT cached; retried next call)
     return _sm_cache[arn]
+
+
+def _key_version(domain=None):
+    """R3-5: an INFORMATIONAL descriptor of the signing key used — '<domain>:sm:<VersionId>' for the
+    Secrets Manager path, '<domain>:env' for env-supplied keys. Recorded in the token (NOT part of
+    the signed canon — verification depends only on the key itself), so during/after a rotation an
+    auditor can tell which key version minted any given artifact."""
+    dom = domain if domain in _DOMAINS else "shared"
+    if domain in _DOMAINS:
+        env_k, arn_k = _DOMAINS[domain]
+        if os.environ.get(env_k):
+            return f"{dom}:env"
+        arn = os.environ.get(arn_k) or ""
+        if arn:
+            return f"{dom}:sm:{_kv_cache.get(arn, 'unresolved')}"
+    if os.environ.get(_SECRET_ENV):
+        return f"{dom}:env"
+    arn = os.environ.get(_SECRET_ARN_ENV) or ""
+    if arn:
+        return f"{dom}:sm:{_kv_cache.get(arn, 'unresolved')}"
+    return f"{dom}:none"
 
 
 def _secret(domain=None):
@@ -116,7 +142,8 @@ def sign(source, fields, domain=None):
         return {"source": source, "authoritative": False, "sig": None, "alg": _ALG,
                 "reason": "signing secret not configured for this trust domain; source values cannot be signed as authoritative"}
     sig = hmac.new(s, _canon(source, fields).encode("utf-8"), hashlib.sha256).hexdigest()
-    return {"source": source, "authoritative": True, "sig": sig, "alg": _ALG}
+    return {"source": source, "authoritative": True, "sig": sig, "alg": _ALG,
+            "key_version": _key_version(domain)}   # R3-5: rotation forensics (informational)
 
 
 def verify(source, fields, token, domain=None):

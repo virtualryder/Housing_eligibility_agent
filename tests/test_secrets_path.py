@@ -121,6 +121,40 @@ def test_sanitized_ref_rejected_when_minted_with_hud_key(monkeypatch):
     assert sanitized.verify_ref(forged) is False
 
 
+# ── R3-5: key-version stamping (rotation forensics) ───────────────────────────
+
+def test_tokens_stamp_key_version(monkeypatch):
+    # env-supplied domain key -> '<domain>:env'
+    p = _fresh_provenance(monkeypatch, PROVENANCE_SECRET_HUD="hud-key-1")
+    tok = p.sign("s", {"a": 1}, domain="hud")
+    assert tok["key_version"] == "hud:env"
+    # Secrets Manager path -> '<domain>:sm:<VersionId>'
+    p = _fresh_provenance(monkeypatch,
+                          PROVENANCE_SECRET_ARN_DEID="arn:aws:secretsmanager:us-east-1:111122223333:secret:deid-key")
+
+    class _SM:
+        def get_secret_value(self, SecretId):
+            return {"SecretString": "sm-secret", "VersionId": "v-abc123"}
+
+    import boto3
+    monkeypatch.setattr(boto3, "client", lambda *_a, **_k: _SM())
+    tok = p.sign("s", {"a": 1}, domain="deid")
+    assert tok["key_version"] == "deid:sm:v-abc123"
+    # informational only: verification is untouched by the stamp
+    assert p.verify("s", {"a": 1}, tok, domain="deid") is True
+    tampered = dict(tok); tampered["key_version"] = "deid:sm:v-FORGED"
+    assert p.verify("s", {"a": 1}, tampered, domain="deid") is True   # not part of the canon (by design)
+
+
+def test_sanitized_ref_carries_key_version(monkeypatch):
+    p = _fresh_provenance(monkeypatch, PROVENANCE_SECRET_DEID="deid-key-1")
+    import sanitized
+    importlib.reload(sanitized)
+    ref = sanitized.mint_ref("[REDACTED:NAME] applies", engine="comprehend")
+    assert ref["key_version"] == "deid:env"
+    assert sanitized.verify_ref(ref) is True
+
+
 def test_hud_token_resolves_from_arn_and_fails_closed(monkeypatch):
     sys.path.insert(0, str(ROOT / "agents" / "housing-assistance" / "tools"))
     monkeypatch.delenv("HUD_API_TOKEN", raising=False)

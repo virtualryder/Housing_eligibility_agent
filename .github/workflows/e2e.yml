@@ -1,3 +1,6 @@
+# LEGACY (shell-engine path) — retained for internal reference only. The SUPPORTED reproducible
+# validation is .github/workflows/release-validation.yml (CDK path at a tagged release via OIDC).
+#
 # End-to-end deploy test — OPT-IN, manual only. Stands up the governance spine in a real AWS
 # account, proves it live with the demo (Cedar in ENFORCE), and tears it down. NEVER runs on push.
 #

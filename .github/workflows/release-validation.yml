@@ -1,0 +1,173 @@
+# Reproducible RELEASE VALIDATION (Review-3) — deploys a TAGGED release via the supported CDK path
+# into a clean validation account using GitHub OIDC (no long-lived keys), proves it live, tears it
+# down, and publishes a validation report (run id, commit SHA, tag, stack outputs, verdicts) so a
+# reviewer can independently confirm the release deploys — not just read the author's evidence.
+#
+# One-time setup (validation account + repo settings):
+#   1. Deploy .github/setup/github-oidc-validation-role.yaml into a DEDICATED clean AWS account.
+#   2. Repo Settings -> Secrets and variables -> Actions:
+#        VARIABLE  AWS_VALIDATION_ROLE_ARN  = the stack's RoleArn output
+#        SECRET    HUD_API_TOKEN            = a huduser.gov token (optional; without it the HUD leg
+#                                             degrades to found:false and the run still validates
+#                                             the fail-closed path)
+#   3. Enable Anthropic Claude model access in Bedrock (us-east-1) in that account.
+#   4. `cdk bootstrap` the account once (or let the workflow do it — it tries).
+#
+# Run: Actions -> "release-validation" -> Run workflow -> pick the tag -> type "validate".
+# Cost: cents (public mode) / a few dollars (gate-b mode: NAT + Network Firewall hours).
+name: release-validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to validate (checked out exactly; never main)"
+        required: true
+        default: "v0.9.3"
+      confirm:
+        description: 'Type "validate" to confirm a live deploy -> prove -> destroy'
+        required: true
+        default: ""
+      mode:
+        description: "public = data/compute/workflow (fast, cents). gate-b = + network/identity/observability switches (slow, dollars)."
+        type: choice
+        options: [public, gate-b]
+        default: public
+
+concurrency:
+  group: release-validation
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  AWS_DEFAULT_REGION: us-east-1
+  PREFIX: hou-rv
+
+jobs:
+  validate:
+    if: ${{ github.event.inputs.confirm == 'validate' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout the EXACT tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_tag }}
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+
+      - name: Install toolchain
+        run: |
+          python -m pip install -q -r cdk/requirements.txt boto3 pytest
+          npm install -g aws-cdk
+
+      - name: Offline suite must be green at the tag
+        run: python -m pytest tests/ -q
+
+      - name: Assume the validation role (OIDC — no stored keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_VALIDATION_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Bootstrap (idempotent)
+        run: cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/us-east-1" || true
+
+      - name: Deploy the release (supported CDK path)
+        run: |
+          cd cdk
+          CTX="-c env=rv -c retention_profile=sandbox-demo -c tenant=validation-run"
+          if [ "${{ github.event.inputs.mode }}" = "gate-b" ]; then
+            CTX="$CTX -c kms=customer-managed -c network_mode=private -c identity_mode=pilot"
+            cdk deploy ${PREFIX}-data ${PREFIX}-network ${PREFIX}-compute ${PREFIX}-workflow ${PREFIX}-identity ${PREFIX}-observability $CTX --require-approval never
+          else
+            cdk deploy ${PREFIX}-data ${PREFIX}-compute ${PREFIX}-workflow $CTX --require-approval never
+          fi
+
+      - name: Stage HUD token (optional)
+        if: ${{ env.HUD != '' }}
+        env: { HUD: "${{ secrets.HUD_API_TOKEN }}" }
+        run: aws secretsmanager put-secret-value --secret-id ${PREFIX}/hud-api-token --secret-string "$HUD"
+
+      - name: Validate deployment (machine verdict)
+        run: python scripts/validate_deployment.py --env rv --region us-east-1 | tee validation-verdict.json
+
+      - name: Strict PII canary (ingest -> ref-only execution -> sweep ALL destinations)
+        run: |
+          python - <<'EOF'
+          import sys, json, time, boto3
+          sys.path.insert(0, "scripts")
+          import pii_canary as pc
+          m = pc.make_marker(); case = pc.build_canary_case(m)
+          lam, sfn = boto3.client("lambda"), boto3.client("stepfunctions")
+          ing = json.loads(lam.invoke(FunctionName="hou-rv-ingest-case",
+                Payload=json.dumps({"application": case["application_text"],
+                                    "case_id": case["case_id"]}).encode())["Payload"].read())
+          assert ing.get("ingested") and m not in json.dumps(ing)
+          arn = next(x["stateMachineArn"] for x in sfn.list_state_machines()["stateMachines"]
+                     if x["name"].startswith("hou-rv"))
+          sfn.start_execution(stateMachineArn=arn, name=f"rv-canary-{int(time.time())}",
+                              input=json.dumps({"case_id": case["case_id"], "requester": "rv",
+                                                "case_ref": ing["case_ref"]}))
+          time.sleep(90)
+          open("canary-marker.txt", "w").write(m)
+          EOF
+          python scripts/pii_canary.py --prefix hou-rv --sweep-only --strict --marker "$(cat canary-marker.txt)" | tee canary-verdict.json
+
+      - name: Stop any paused executions before destroy
+        if: always()
+        run: |
+          ARN=$(aws stepfunctions list-state-machines --query "stateMachines[?starts_with(name,'hou-rv')].stateMachineArn" --output text) || true
+          if [ -n "$ARN" ]; then
+            for e in $(aws stepfunctions list-executions --state-machine-arn "$ARN" --status-filter RUNNING --query "executions[].executionArn" --output text); do
+              aws stepfunctions stop-execution --execution-arn "$e" --cause "release-validation teardown" || true
+            done
+          fi
+
+      - name: Destroy + sweep retained resources (must end clean)
+        if: always()
+        run: |
+          cd cdk && cdk destroy --all -c env=rv -c retention_profile=sandbox-demo --force || true
+          cd .. && python scripts/cleanup_retained.py --prefix hou-rv --region us-east-1 --i-know-this-deletes-evidence | tee sweep-verdict.json
+
+      - name: Publish the validation report
+        if: always()
+        run: |
+          python - <<'EOF'
+          import json
+          report = {
+              "release_tag": "${{ github.event.inputs.release_tag }}",
+              "commit_sha": "${{ github.sha }}",
+              "run_id": "${{ github.run_id }}",
+              "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "mode": "${{ github.event.inputs.mode }}",
+              "region": "us-east-1",
+              "validated_by": "GitHub Actions via OIDC (no stored keys); independent of the author's account",
+          }
+          for name, path in (("deployment_verdict", "validation-verdict.json"),
+                             ("strict_canary", "canary-verdict.json"),
+                             ("teardown_sweep", "sweep-verdict.json")):
+              try:
+                  report[name] = json.loads(open(path).read())
+              except Exception:
+                  report[name] = "missing-or-unparsed"
+          open("release-validation-report.json", "w").write(json.dumps(report, indent=2))
+          print(json.dumps(report, indent=2))
+          EOF
+          echo '## Release validation report' >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat release-validation-report.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-validation-report-${{ github.event.inputs.release_tag }}-${{ github.run_id }}
+          path: release-validation-report.json

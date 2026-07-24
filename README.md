@@ -117,9 +117,17 @@ under [`evidence/`](evidence/):
    live: zero marker hits in every destination including SFN history**
    ([`evidence/GATE-B-VALIDATION.md`](evidence/GATE-B-VALIDATION.md) addendum). A CDK assertion pins
    the property.
-2. Provenance key lifecycle: rotation runbook + key-version stamping beyond the GA-2 domain split.
+2. ~~Provenance key lifecycle~~ — **CLOSED (2026-07-24)**: [`docs/KEY-MANAGEMENT.md`](docs/KEY-MANAGEMENT.md)
+   (inventory, rotation procedure, blast-radius table, monitoring) and every token/ref now stamps
+   its `key_version` (Secrets Manager VersionId) for rotation forensics. Asymmetric (KMS
+   sign/verify) remains the documented production-hardening path.
 3. Load validated at 10-way concurrency; production-scale (50–100+) and partial-failure/recovery
    testing remain.
+4. Independent reproducibility: a **GitHub-OIDC release-validation workflow** now ships
+   ([`.github/workflows/release-validation.yml`](.github/workflows/release-validation.yml) + one-time
+   role setup in `.github/setup/`) — deploys a tagged release into a clean validation account, runs
+   the machine verdict + strict PII canary, tears down, and publishes a signed-by-run-id validation
+   report. **First independent run pending** (requires the validation account + `AWS_VALIDATION_ROLE_ARN`).
 4. Customer-owned governance signatures (PIA, retention, IR, access review, backup/recovery
    exercise) pending per [`docs/GATE-B-CHECKLIST.md`](docs/GATE-B-CHECKLIST.md).
 

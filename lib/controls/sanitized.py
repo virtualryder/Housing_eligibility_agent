@@ -116,7 +116,8 @@ def mint_ref(masked_text, engine, entities_masked=0, tenant=None, store=None):
     tok = provenance.sign(SOURCE, fields, domain="deid")   # GA-2: de-identification trust domain key
     ref = dict(fields)
     ref.update({"source": SOURCE, "authoritative": tok["authoritative"],
-                "sig": tok["sig"], "alg": tok["alg"]})
+                "sig": tok["sig"], "alg": tok["alg"],
+                "key_version": tok.get("key_version", "")})   # R3-5: rotation forensics
     st = store if store is not None else default_store()
     stored = False
     if st is not None:

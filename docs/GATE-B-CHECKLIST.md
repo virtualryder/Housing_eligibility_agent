@@ -55,7 +55,11 @@ the recovery EXERCISE (restore a table to a point in time in a scratch account, 
 verification to INTACT) must be performed once before the pilot and captured in evidence. Owner:
 operating SA.
 
-**Remaining Gate-B engineering (tracked, not blocking the checklist's publication):**
-pass-by-reference for the controller payload (the B4 canary's known finding), custom security
-metrics (forged-ref count → alarm), and the PHA administrative-plan / notice-language accessibility
-reviews which are customer work items.
+**Gate-B engineering — all closed (Review-3 cycle, 2026-07-24):** pass-by-reference orchestration
+(strict canary PASS), guard-failure security metrics + alarm, key-management runbook + key-version
+stamping ([`KEY-MANAGEMENT.md`](KEY-MANAGEMENT.md)), and a reproducible **GitHub-OIDC
+release-validation workflow** (`.github/workflows/release-validation.yml` + one-time role setup in
+`.github/setup/`) so a reviewer can independently confirm a tagged release deploys, validates, and
+tears down clean — first independent run pending the validation account. Remaining items are
+customer-owned: governance signatures above, PHA administrative-plan / notice-accessibility reviews,
+enterprise-IdP exercise, independent security testing.

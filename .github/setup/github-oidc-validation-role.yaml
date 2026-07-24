@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  One-time setup for the reproducible release-validation workflow (Review-3): a GitHub OIDC identity
+  provider + a deploy role that ONLY this repository's Actions runs can assume. Deploy this into a
+  DEDICATED, CLEAN validation account (never a shared or production account) - the role is
+  deliberately broad (CDK deploys IAM/KMS/VPC/Network Firewall) and the account boundary IS the
+  blast-radius control.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: virtualryder
+  RepositoryName:
+    Type: String
+    Default: Housing_eligibility_agent
+  OidcProviderArn:
+    Type: String
+    Default: ""
+    Description: Existing GitHub OIDC provider ARN if the account already has one (leave blank to create).
+
+Conditions:
+  CreateProvider: !Equals [!Ref OidcProviderArn, ""]
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+      ThumbprintList: [6938fd4d98bab03faadb97b34396831e3780aea1]  # GitHub root (rotates; AWS now validates via trust chain)
+
+  ReleaseValidationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: housing-release-validation
+      MaxSessionDuration: 7200
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If [CreateProvider, !Ref GitHubOidcProvider, !Ref OidcProviderArn]
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                # ONLY this repo; any ref (tags drive validation runs)
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${RepositoryName}:*
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess   # validation-account-only; account boundary = blast radius
+
+Outputs:
+  RoleArn:
+    Description: Set this as the repository VARIABLE AWS_VALIDATION_ROLE_ARN.
+    Value: !GetAtt ReleaseValidationRole.Arn
