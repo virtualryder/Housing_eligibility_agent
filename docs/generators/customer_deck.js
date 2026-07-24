@@ -175,7 +175,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   const s = p.addSlide(); bg(s, CLOUD);
   eyebrow(s, "Where it stands today");
   title(s, "Proven end-to-end on AWS — not a slideware demo");
-  const stats = [["117/117", "automated tests green in CI", MINT], ["End-to-end", "governed pipeline proven live on AWS", TEAL], ["100%", "of determinations gated by a specialist", AMBER]];
+  const stats = [["145/145", "automated tests green in CI", MINT], ["End-to-end", "proven live - including fully network-isolated", TEAL], ["100%", "of determinations gated by a specialist", AMBER]];
   const sw = 3.9, gap = 0.2, x0 = 0.62, y = 1.55;
   stats.forEach((st, i) => {
     const x = x0 + i * (sw + gap);
@@ -186,11 +186,11 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   card(s, 0.62, 3.2, 12.1, 3.0, CARD, 0.1);
   s.addText("Validated live in your deployment path (AWS CDK), enforcement on — evidence captured in the repo:", { x: 0.95, y: 3.42, w: 11.4, h: 0.4, fontFace: BF, fontSize: 13.5, bold: true, color: NAVY, margin: 0 });
   const proofs = [
-    "The full governed workflow ran end-to-end live — intake to committed determination",
-    "PII removed before the model — fail-closed, and cryptographically proven downstream",
+    "The full governed workflow ran end-to-end live — in private subnets, behind an egress firewall that permits ONLY the HUD API",
+    "PII removed before the model — fail-closed, cryptographically proven, and a telemetry canary confirmed zero PII in logs or traces",
     "A live, authoritative HUD income-limit lookup with a verified provenance signature",
-    "The agent blocked from committing a determination — every time",
-    "A different specialist approves; the approval is bound to the exact case content and finalizes exactly once",
+    "Your keys everywhere: customer-managed KMS over every store, secret, log, and alert; MFA-required operator identity",
+    "A different specialist approves; the approval is bound to the exact case content — a 10-way replay storm committed exactly once",
     "Tamper-evident (hash-chained) audit of every step; the authorization gateway deploys as code, in ENFORCE",
   ];
   const cw = 5.5, cx = [0.98, 6.9];
@@ -201,7 +201,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
     s.addText(t, { x: x + 0.44, y: yy - 0.08, w: cw, h: 0.5, valign: "middle", fontFace: BF, fontSize: 12.5, color: INK, lineSpacingMultiple: 1.02, margin: 0 });
   });
   footer(s, 7);
-  s.addNotes("Reproducible and enforced. Two clean-account validation runs are captured in the repo (evidence/): the full governed pipeline SUCCEEDED live on real services, and the Cedar authorization gateway reached CREATE_COMPLETE in ENFORCE as pure infrastructure-as-code. The income-vs-AMI engine is deterministic and transparent, so a housing specialist can defend each determination at an informal hearing.");
+  s.addNotes("Reproducible and enforced. Three clean-account validation runs are captured in the repo (evidence/): the full governed pipeline live on real services; the Cedar authorization gateway as pure infrastructure-as-code in ENFORCE; and the complete hardening posture — private networking with a HUD-only egress allowlist, customer-managed KMS, MFA-required identity, concurrency and replay-storm proofs, and a passing PII telemetry canary. The income-vs-AMI engine is deterministic and transparent, so a housing specialist can defend each determination at an informal hearing.");
 })();
 
 /* 8. DIVISION OF RESPONSIBILITY */

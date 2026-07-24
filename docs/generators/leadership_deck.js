@@ -218,7 +218,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   const s = p.addSlide(); bg(s, CLOUD);
   eyebrow(s, "Evidence");
   title(s, "Proof, not slideware: validated live on AWS, evidence captured");
-  const stats = [["117/117", "automated tests green", MINT], ["2", "clean-account live validation runs captured", TEAL], ["8", "real defects found & fixed by validation", AMBER], ["0", "residual on teardown", NAVY]];
+  const stats = [["145/145", "automated tests green", MINT], ["3", "clean-account live validation runs captured", TEAL], ["10", "real defects found & fixed by validation", AMBER], ["0", "residual on teardown", NAVY]];
   const sw = 2.9, gap = 0.23, x0 = 0.62, y = 1.5;
   stats.forEach((st, i) => {
     const x = x0 + i * (sw + gap);
@@ -229,14 +229,14 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   card(s, 0.62, 3.15, 12.1, 3.05, CARD, 0.1);
   s.addText("Captured in the repo (evidence/), run on the customer deployment path (AWS CDK) and torn down clean:", { x: 0.95, y: 3.35, w: 11.4, h: 0.4, fontFace: BF, fontSize: 13, bold: true, color: NAVY, margin: 0 });
   const proofs = [
-    "Full governed pipeline SUCCEEDED live — intake to committed determination",
-    "Live HUD income-limit lookup; provenance signature verified by the workflow",
-    "Real PII masking (Comprehend), cryptographically proven fail-closed downstream",
-    "Deterministic AMI engine; real Bedrock notice through a Guardrail",
+    "Full governed pipeline SUCCEEDED live — including inside a locked-down private network",
+    "Egress deny-by-default: a firewall allowlist naming ONLY the HUD API — captured live",
+    "Real PII masking, cryptographically proven; telemetry canary: zero PII in logs/X-Ray",
+    "Customer-managed KMS over every store, secret, log, and alert channel — full run under it",
     "Cedar authorization gateway deployed as pure IaC — CREATE_COMPLETE in ENFORCE",
-    "No-self-commit — the agent can't finalize; deny-by-default holds",
-    "Human sign-off: approver ≠ requester, approval hash-bound to the exact case",
-    "Hash-chained WORM audit + exactly-once finalization (replay-safe)",
+    "MFA-required identity, threat protection enforced, zero shipped users — captured live",
+    "10 concurrent cases all succeeded; a 10-way replay storm committed EXACTLY once",
+    "Hash-chained WORM audit; approver ≠ requester, approval hash-bound to the exact case",
   ];
   const cw = 5.55, cx = [0.98, 6.9];
   proofs.forEach((t, i) => {
@@ -246,7 +246,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
     s.addText(t, { x: x + 0.44, y: yy - 0.05, w: cw, h: 0.44, valign: "middle", fontFace: BF, fontSize: 12, color: INK, margin: 0 });
   });
   footer(s, 8);
-  s.addNotes("Two clean-account validation runs are captured in evidence/ and referenced from VALIDATED_RELEASE.md: the full governed pipeline SUCCEEDED end-to-end on live services (HUD, Comprehend, Secrets Manager, Bedrock, WORM, sign-off, exactly-once finalize), and the AgentCore/Cedar gateway attachment reached CREATE_COMPLETE in ENFORCE as pure CDK IaC. Validation surfaced 8 real defects — every one fixed and regression-tested, which is the point of validating. Zero residual on teardown.");
+  s.addNotes("Three clean-account validation runs are captured in evidence/ and referenced from VALIDATED_RELEASE.md: the governed pipeline end-to-end on live services; the AgentCore/Cedar gateway as pure IaC in ENFORCE; and a full Gate-B hardening run — private subnets behind a Network Firewall egress allowlist naming only the HUD API, customer-managed KMS everywhere, MFA-required identity with threat protection enforced, tenant pinned and cryptographically stamped, 10 concurrent cases green, a 10-way replay storm committing exactly once, and a PII telemetry canary passing with zero hits in logs/X-Ray/DLQs. Validation surfaced 10 real defects — every one fixed and regression-tested, which is the point of validating. Zero residual on teardown.");
 })();
 
 /* 9. RUNTIME + IDENTITY */

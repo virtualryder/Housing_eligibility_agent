@@ -24,8 +24,12 @@ class NetworkStack(cdk.Stack):
     def __init__(self, scope: Construct, cid: str, *, prefix: str, **kw):
         super().__init__(scope, cid, **kw)
 
+        # Live-run find (valb): the per-AZ DescribeFirewall response field is an Fn::GetAtt ATTRIBUTE
+        # NAME, so the AZ must be a synth-time LITERAL — an env-agnostic stack's symbolic AZ tokens
+        # produce an invalid template. AZs are therefore pinned explicitly (us-east-1 deployment path).
         self.vpc = ec2.Vpc(
-            self, "Vpc", vpc_name=f"{prefix}-net", max_azs=2, nat_gateways=2,
+            self, "Vpc", vpc_name=f"{prefix}-net",
+            availability_zones=["us-east-1a", "us-east-1b"], nat_gateways=2,
             subnet_configuration=[
                 ec2.SubnetConfiguration(name="public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24),
                 ec2.SubnetConfiguration(name="firewall", subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS, cidr_mask=28),

@@ -24,9 +24,10 @@ the pharmacovigilance, benefits, and financial-aid agents, from a reusable, mani
 ## Production-grade build (P0 hardening — 2026-07)
 
 This repo is the portfolio's **lead agent** being taken to pilot-readiness under
-[`PRODUCTION-PLAN.md`](PRODUCTION-PLAN.md). The following are **built and offline-proven (117 tests
-green)** — and the two highest-stakes claims are now also **live-proven with captured evidence**
-(see *Validated evidence* below) — closing the external deep-review's P0 findings:
+[`PRODUCTION-PLAN.md`](PRODUCTION-PLAN.md). The following are **built and offline-proven (145 tests
+green)** — and the highest-stakes claims are also **live-proven with captured evidence**, including
+a full **Gate-B run with every hardening switch on** (see *Validated evidence* below) — closing the
+external deep-review's P0 findings:
 
 - **De-identification is proven, not asserted (P0-1).** `mask_pii` mints a server-signed
   `sanitized_ref` over the exact masked content; every downstream tool verifies it fail-closed and
@@ -70,9 +71,19 @@ under [`evidence/`](evidence/):
   ([`evidence/P0-11-VALIDATION-RUN.md`](evidence/P0-11-VALIDATION-RUN.md)): forged signature / spoofed
   `deidentified:true` / mutated content all refused; a source-down HUD lookup routed to
   `ManualReview` — no determination on unverifiable data.
-- **Validation found real defects** — eight live findings across the runs (IAM/AgentCore API
-  constraints, an orphaned-engine conflict, a CloudFormation async-invoke stall) — every one fixed,
-  regression-tested, and documented in the evidence. That is what the validation step is for.
+- **The full Gate-B hardening posture ran live, end-to-end**
+  ([`evidence/GATE-B-VALIDATION.md`](evidence/GATE-B-VALIDATION.md)): governed Lambdas in **isolated
+  subnets** behind an AWS Network Firewall **deny-by-default allowlist naming only `.huduser.gov`**;
+  a **customer-managed KMS key** over tables, WORM vault, secrets, Lambda env, log groups, and SNS;
+  **MFA-required** identity with threat protection ENFORCED; the **deployment-pinned tenant**
+  HMAC-signed into the live sanitized artifact; **10/10 concurrent executions SUCCEEDED**; a 10-way
+  **replay storm committed exactly once** (`FIRST:1, IDEMPOTENT:9`); and the **PII telemetry canary
+  passed** — zero marker hits in CloudWatch Logs, X-Ray, and DLQs (the one known finding, Step
+  Functions history, is quantified with its pass-by-reference remediation tracked).
+- **Validation found real defects** — ten live findings across the runs (IAM/AgentCore API
+  constraints, an orphaned-engine conflict, a CloudFormation async-invoke stall, an env-agnostic AZ
+  token in the firewall routing, a stack-ordering race) — every one fixed, regression-tested, and
+  documented in the evidence. That is what the validation step is for.
 
 ---
 

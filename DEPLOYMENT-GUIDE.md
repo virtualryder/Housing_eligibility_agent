@@ -21,6 +21,14 @@
 | `-c env=` | dev | pilot | prod |
 | `-c retention_profile=` | sandbox-demo | pilot | production-reference (COMPLIANCE — customer-approved schedule ONLY) |
 | `-c kms=` | aws-managed | customer-managed | customer-managed |
+| `-c network_mode=` | public | **private** (Gate-B B1: isolated subnets + Network Firewall egress allowlist = `.huduser.gov` only) | private |
+| `-c identity_mode=` | sandbox | **pilot** (Gate-B B3: MFA REQUIRED software-token-only, threat protection ENFORCED) | pilot |
+| `-c tenant=` | *(unset)* | **`<pha-id>`** (Gate-B B5: deployment-pinned tenant, HMAC-signed into every sanitized artifact) | `<pha-id>` |
+
+Optional enterprise-OIDC federation as IaC: `-c oidc_issuer_url=… -c oidc_client_id=…
+-c oidc_client_secret_arn=<SecretsManager ARN>` (the client secret enters the template only as a
+CloudFormation dynamic reference). The full Gate-B posture was validated live 2026-07-24 —
+[`evidence/GATE-B-VALIDATION.md`](evidence/GATE-B-VALIDATION.md).
 
 Secrets (created by the compute stack, values operator-managed):
 - `hou-<env>/provenance-signing-deid` — generated automatically; signs mask_pii sanitized-artifact refs ONLY (GA-2 trust-domain key; never plaintext anywhere).
@@ -34,9 +42,14 @@ Identity: the pool ships with ZERO users. Federate your IdP per `docs/IdP-Federa
 ## 3. Deploy
 ```bash
 cd cdk && pip install -r requirements.txt
-cdk deploy --all -c env=pilot -c retention_profile=pilot -c kms=customer-managed
+cdk deploy --all -c env=pilot -c retention_profile=pilot -c kms=customer-managed \
+  -c network_mode=private -c identity_mode=pilot -c tenant=<pha-id>
 # then attach the AgentCore gateway + Cedar policies (GatewayStack; see cdk/README.md §AgentCore)
 ```
+Ordering notes (from the live Gate-B run): the **observability stack imports the workflow stack's
+export — deploy it after workflow** (CDK orders this automatically; if driving CloudFormation
+directly, sequence it yourself). The Network Firewall adds ~8–10 min to network-stack create, and
+VPC-attached Lambda stacks take longer to DELETE (ENI release) — plan windows accordingly.
 
 ## 4. Validate (must PASS before any use)
 ```bash

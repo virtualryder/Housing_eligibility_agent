@@ -148,23 +148,23 @@ platform."*
 
 ### Gate B — before real applicant PII (build status: see docs/GATE-B-CHECKLIST.md)
 
-**Built + assertion/unit-proven (2026-07-24), each a deploy-time switch or harness:**
+**Built AND validated live (2026-07-24, `evidence/GATE-B-VALIDATION.md` — one clean-account run
+with EVERY switch on; each a deploy-time switch or harness):**
 
 | # | Item | Status |
 |---|---|---|
-| B1 | Private networking + locked egress — Lambdas in ISOLATED subnets, ALL egress through Network Firewall deny-by-default allowlist naming ONLY `.huduser.gov`, S3/DDB + 7 interface endpoints, 443-only SG (`-c network_mode=private`) | ✅ built + CDK-asserted |
-| B2 | Customer-managed KMS — one rotating CMK over tables, WORM vault, signing secrets, HUD token, Lambda env, per-function log groups, SNS ops topic (`-c kms=customer-managed`) | ✅ built + CDK-asserted |
-| B3 | Pilot identity — MFA REQUIRED (software token only), threat protection ENFORCED, zero IaC users; enterprise OIDC IdP as IaC, client secret via SM dynamic reference (`-c identity_mode=pilot`) | ✅ built + CDK-asserted |
-| B4 | PII telemetry-leak canary — marked case swept across Logs/X-Ray/SFN history/DLQs (`scripts/pii_canary.py`); **known finding: SFN history carries the raw case → pass-by-reference remediation tracked** | ✅ built; strict-pass pending remediation |
-| B5 | Tenant isolation — deployment-pinned tenant (never request body), HMAC-signed into every sanitized_ref, cross-tenant refs refused even validly signed (`-c tenant=<pha-id>`) | ✅ built + proven |
-| B6 | Load/replay harness — concurrent executions all-legal-terminal + exactly-once under a replay storm (`scripts/load_replay_test.py`) | ✅ built; live capture pending |
+| B1 | Private networking + locked egress — Lambdas in ISOLATED subnets, ALL egress through Network Firewall deny-by-default allowlist naming ONLY `.huduser.gov`, S3/DDB + 7 interface endpoints, 443-only SG (`-c network_mode=private`) | ✅ **LIVE-PROVEN** — pipeline succeeded inside the private network; HUD call through the firewall; rule group captured |
+| B2 | Customer-managed KMS — one rotating CMK over tables, WORM vault, signing secrets, HUD token, Lambda env, per-function log groups, SNS ops topic (`-c kms=customer-managed`) | ✅ **LIVE-PROVEN** — full run under `alias/hou-valb-data` CMK |
+| B3 | Pilot identity — MFA REQUIRED (software token only), threat protection ENFORCED, zero IaC users; enterprise OIDC IdP as IaC, client secret via SM dynamic reference (`-c identity_mode=pilot`) | ✅ **LIVE-PROVEN** — `MfaConfiguration ON` / `ENFORCED` / 0 users captured (real-IdP round-trip = engagement work) |
+| B4 | PII telemetry-leak canary — marked case swept across Logs/X-Ray/SFN history/DLQs (`scripts/pii_canary.py`) | ✅ **LIVE PASS** — 0 hits in Logs/X-Ray/DLQs; SFN-history finding quantified (87) → **pass-by-reference remediation tracked**; `--strict` = exit bar |
+| B5 | Tenant isolation — deployment-pinned tenant (never request body), HMAC-signed into every sanitized_ref, cross-tenant refs refused even validly signed (`-c tenant=<pha-id>`) | ✅ **LIVE-PROVEN** — `tenant: pha-la-county` captured inside the live signed artifact |
+| B6 | Load/replay harness — concurrent executions all-legal-terminal + exactly-once under a replay storm (`scripts/load_replay_test.py`) | ✅ **LIVE-PROVEN** — 10/10 SUCCEEDED; storm `FIRST:1, IDEMPOTENT:9`; 12 FINAL markers, one per case |
 
-**Remaining for Gate-B exit:** the single Gate-B validation run (all switches on: private + CMK +
-pilot identity + tenant; federated MFA login through the gateway; canary + load/replay captures →
-`evidence/GATE-B-VALIDATION.md`) · pass-by-reference controller payload (B4 finding) · custom
-security metrics (forged-ref → alarm) · the customer-owned governance signatures (PIA, retention
-approval, IR, access review, backup/recovery exercise — templates in docs/GATE-B-CHECKLIST.md) · PHA
-administrative-plan + notice accessibility reviews · written data-processing responsibilities.
+**Remaining for Gate-B exit (engineering):** pass-by-reference controller payload (the B4 finding) ·
+custom security metrics (forged-ref → alarm). **Remaining (customer-owned):** governance signatures —
+PIA, retention approval, IR, access review, backup/recovery exercise (templates + owners in
+docs/GATE-B-CHECKLIST.md) · PHA administrative-plan + notice accessibility reviews · written
+data-processing responsibilities · a real-IdP federated login exercise.
 
 ### Gate C — before production
 

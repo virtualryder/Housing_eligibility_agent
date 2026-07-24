@@ -6,7 +6,11 @@
 > validated on the **CDK customer deployment path** in two captured clean-account runs — the full
 > governed pipeline SUCCEEDED end-to-end on live services (exactly-once finalize, content-hash-bound
 > approval), and the AgentCore Gateway/Cedar attachment reached `CREATE_COMPLETE` in **ENFORCE** as
-> pure IaC. See [`../evidence/GA-4-LIVE-HAPPY-PATH.md`](../evidence/GA-4-LIVE-HAPPY-PATH.md),
+> pure IaC. A third run validated the **full Gate-B hardening posture live** — private networking
+> with a HUD-only egress allowlist, customer-managed KMS, MFA-required identity, tenant pinning,
+> 10-way concurrency, an exactly-once replay storm, and a passing PII telemetry canary
+> ([`../evidence/GATE-B-VALIDATION.md`](../evidence/GATE-B-VALIDATION.md)). See also
+> [`../evidence/GA-4-LIVE-HAPPY-PATH.md`](../evidence/GA-4-LIVE-HAPPY-PATH.md),
 > [`../evidence/P0-11-VALIDATION-RUN.md`](../evidence/P0-11-VALIDATION-RUN.md), and
 > [`../VALIDATED_RELEASE.md`](../VALIDATED_RELEASE.md).
 
