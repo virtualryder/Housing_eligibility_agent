@@ -146,17 +146,25 @@ platform."*
 | A11 | **Config worksheet + synthetic dataset** | ✅ **DONE** — `CONFIG-WORKSHEET.md`; `data/synthetic/` (5 cases + expected results, mirrors CI goldens) |
 | A12 | **Pilot support/ownership** | ✅ captured in DEPLOYMENT-GUIDE §Support + CONFIG-WORKSHEET §14-15 (names filled at engagement) |
 
-### Gate B — before real applicant PII (unchanged from P1, now ordered)
+### Gate B — before real applicant PII (build status: see docs/GATE-B-CHECKLIST.md)
 
-Enterprise IdP federation + MFA (phishing-resistant) · private networking + egress control (VPC,
-endpoints, Network Firewall, HUD allowlist, WAF, throttling) · customer-managed KMS · **telemetry
-PII-leak canary** (unique fake-PII marker traced through every telemetry destination incl. Step
-Functions history, X-Ray, Bedrock logs, DLQs) · privacy impact assessment · customer security review ·
-customer-approved retention schedule (never assert 7y as universal) · access review + IR procedure +
-backup/recovery validation · load/concurrency/replay testing · PHA administrative-plan review ·
-accessibility review of notices · written data-processing responsibilities · **tenant isolation**:
-tenant derived from authenticated identity (never request body), tenant-keyed storage/audit, Cedar
-tenant conditions — until then, one PHA per isolated AWS environment, no SaaS multi-tenancy claims.
+**Built + assertion/unit-proven (2026-07-24), each a deploy-time switch or harness:**
+
+| # | Item | Status |
+|---|---|---|
+| B1 | Private networking + locked egress — Lambdas in ISOLATED subnets, ALL egress through Network Firewall deny-by-default allowlist naming ONLY `.huduser.gov`, S3/DDB + 7 interface endpoints, 443-only SG (`-c network_mode=private`) | ✅ built + CDK-asserted |
+| B2 | Customer-managed KMS — one rotating CMK over tables, WORM vault, signing secrets, HUD token, Lambda env, per-function log groups, SNS ops topic (`-c kms=customer-managed`) | ✅ built + CDK-asserted |
+| B3 | Pilot identity — MFA REQUIRED (software token only), threat protection ENFORCED, zero IaC users; enterprise OIDC IdP as IaC, client secret via SM dynamic reference (`-c identity_mode=pilot`) | ✅ built + CDK-asserted |
+| B4 | PII telemetry-leak canary — marked case swept across Logs/X-Ray/SFN history/DLQs (`scripts/pii_canary.py`); **known finding: SFN history carries the raw case → pass-by-reference remediation tracked** | ✅ built; strict-pass pending remediation |
+| B5 | Tenant isolation — deployment-pinned tenant (never request body), HMAC-signed into every sanitized_ref, cross-tenant refs refused even validly signed (`-c tenant=<pha-id>`) | ✅ built + proven |
+| B6 | Load/replay harness — concurrent executions all-legal-terminal + exactly-once under a replay storm (`scripts/load_replay_test.py`) | ✅ built; live capture pending |
+
+**Remaining for Gate-B exit:** the single Gate-B validation run (all switches on: private + CMK +
+pilot identity + tenant; federated MFA login through the gateway; canary + load/replay captures →
+`evidence/GATE-B-VALIDATION.md`) · pass-by-reference controller payload (B4 finding) · custom
+security metrics (forged-ref → alarm) · the customer-owned governance signatures (PIA, retention
+approval, IR, access review, backup/recovery exercise — templates in docs/GATE-B-CHECKLIST.md) · PHA
+administrative-plan + notice accessibility reviews · written data-processing responsibilities.
 
 ### Gate C — before production
 
