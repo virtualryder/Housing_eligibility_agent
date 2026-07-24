@@ -182,6 +182,50 @@ def test_ga2_domain_keys_are_separate_secrets_with_split_grants():
         "mask_pii must read ONLY the deid-domain key"
 
 
+# ── Gate-B B3: pilot identity — REQUIRED software MFA, threat protection, OIDC IdP as IaC ──
+
+def test_pilot_identity_requires_software_mfa_and_threat_protection():
+    app = aws_cdk.App()
+    i = IdentityStack(app, "ip", prefix="hou-idp", identity_mode="pilot")
+    tpl = Template.from_stack(i).to_json()
+    pools = [r for r in tpl["Resources"].values() if r["Type"] == "AWS::Cognito::UserPool"]
+    assert len(pools) == 1
+    p = pools[0]["Properties"]
+    assert p["MfaConfiguration"] == "ON"
+    assert p["EnabledMfas"] == ["SOFTWARE_TOKEN_MFA"]          # no SMS anywhere
+    assert p["UserPoolAddOns"]["AdvancedSecurityMode"] == "ENFORCED"
+    assert p.get("AdminCreateUserConfig", {}).get("AllowAdminCreateUserOnly") is True
+    types = [r["Type"] for r in tpl["Resources"].values()]
+    assert "AWS::Cognito::UserPoolUser" not in types            # still zero users (P0-6)
+
+
+def test_sandbox_identity_unchanged_and_unknown_mode_refused():
+    tpl = T_IDENTITY.to_json()
+    p = [r for r in tpl["Resources"].values() if r["Type"] == "AWS::Cognito::UserPool"][0]["Properties"]
+    assert p["MfaConfiguration"] == "OPTIONAL"
+    with pytest.raises(ValueError):
+        IdentityStack(aws_cdk.App(), "ix", prefix="hou-x", identity_mode="prod")
+
+
+def test_enterprise_oidc_federation_as_iac_secret_never_plaintext():
+    app = aws_cdk.App()
+    i = IdentityStack(app, "ifed", prefix="hou-fed", identity_mode="pilot", federation={
+        "issuer_url": "https://login.example.gov/oidc",
+        "client_id": "housing-agent",
+        "client_secret_arn": "arn:aws:secretsmanager:us-east-1:111122223333:secret:oidc-client",
+    })
+    tpl = Template.from_stack(i).to_json()
+    res = tpl["Resources"]
+    idps = [r for r in res.values() if r["Type"] == "AWS::Cognito::UserPoolIdentityProvider"]
+    assert len(idps) == 1 and idps[0]["Properties"]["ProviderType"] == "OIDC"
+    # the client secret is a Secrets Manager DYNAMIC REFERENCE, not a literal
+    blob = json.dumps(idps[0])
+    assert "{{resolve:secretsmanager:" in blob and "oidc-client" in blob
+    # the app client trusts the enterprise IdP (federated users hit the same Cedar policies)
+    clients = [r for r in res.values() if r["Type"] == "AWS::Cognito::UserPoolClient"]
+    assert any("SupportedIdentityProviders" in c["Properties"] for c in clients)
+
+
 # ── Gate-B: customer-managed KMS reaches secrets, env, logs, SNS ─────────────
 
 def test_customer_managed_kms_covers_secrets_env_logs_and_sns():

@@ -51,7 +51,14 @@ data = DataStack(app, f"{prefix}-data", prefix=prefix, retention_profile=profile
 compute = ComputeStack(app, f"{prefix}-compute", prefix=prefix, asset_dir=asset_dir, data=data,
                        provenance_secret=app.node.try_get_context("provenance_secret") or "")
 workflow = WorkflowStack(app, f"{prefix}-workflow", prefix=prefix, compute=compute, data=data)
-identity = IdentityStack(app, f"{prefix}-identity", prefix=prefix)
+identity = IdentityStack(
+    app, f"{prefix}-identity", prefix=prefix,
+    identity_mode=app.node.try_get_context("identity_mode") or "sandbox",
+    federation={
+        "issuer_url": app.node.try_get_context("oidc_issuer_url") or "",
+        "client_id": app.node.try_get_context("oidc_client_id") or "",
+        "client_secret_arn": app.node.try_get_context("oidc_client_secret_arn") or "",
+    })
 observability = ObservabilityStack(app, f"{prefix}-observability", prefix=prefix,
                                    compute=compute, workflow=workflow, data=data)
 gateway = GatewayStack(app, f"{prefix}-gateway", prefix=prefix, compute=compute, identity=identity)
