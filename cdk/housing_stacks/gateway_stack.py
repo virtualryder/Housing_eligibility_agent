@@ -73,6 +73,13 @@ class GatewayStack(cdk.Stack):
         gw_role.add_to_policy(iam.PolicyStatement(
             actions=["lambda:InvokeFunction"],
             resources=[t["lambda_arn"] for t in targets]))   # exact ARNs only (P0-7)
+        # Live-run find (the val2 mystery failure): CreateGateway VALIDATES that the gateway role can
+        # read + evaluate its policy engine; without these, creation fails with AccessDenied.
+        gw_role.add_to_policy(iam.PolicyStatement(
+            actions=["bedrock-agentcore:GetPolicyEngine", "bedrock-agentcore:GetPolicy",
+                     "bedrock-agentcore:ListPolicies", "bedrock-agentcore:EvaluatePolicies"],
+            resources=[f"arn:aws:bedrock-agentcore:{self.region}:{self.account}:policy-engine/*",
+                       f"arn:aws:bedrock-agentcore:{self.region}:{self.account}:policy-engine/*/policy/*"]))
 
         provider_fn = lambda_.Function(
             self, "AttachmentProvider", function_name=f"{prefix}-agentcore-attachment",
