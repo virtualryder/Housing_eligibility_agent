@@ -31,3 +31,7 @@ cdk/cdk.out/
 cdk/.build/
 __pycache__/
 *.pyc
+
+# Local secrets - never commit
+.hud-token.env
+*.secret.env

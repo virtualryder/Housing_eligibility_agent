@@ -24,8 +24,8 @@
 
 Secrets (created by the compute stack, values operator-managed):
 - `hou-<env>/provenance-signing` — generated automatically; never plaintext anywhere.
-- `hou-<env>/hud-api-token` — **you fill this**: register free at huduser.gov →
-  `aws secretsmanager put-secret-value --secret-id hou-<env>/hud-api-token --secret-string <token>`.
+- `hou-<env>/hud-api-token` — token already staged in Secrets Manager (`hud-user/api-token`, validated live 2026-07-24 against LA County/2026); copy at deploy:
+  `aws secretsmanager get-secret-value --secret-id hud-user/api-token --query SecretString --output text | xargs -I{} aws secretsmanager put-secret-value --secret-id hou-<env>/hud-api-token --secret-string {}` (never write the token to a tracked file; local dev uses the gitignored `lib/runtime/.hud-token.env`).
 
 Identity: the pool ships with ZERO users. Federate your IdP per `docs/IdP-Federation-Reference.md`
 (Entra ID / Okta / Ping), map groups to `housing_specialist`, enforce MFA at the IdP.
