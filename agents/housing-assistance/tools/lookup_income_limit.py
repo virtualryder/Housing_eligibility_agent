@@ -33,7 +33,23 @@ import provenance  # shared signer (bundled beside this handler at deploy; on sy
 # token, the downstream determination correctly becomes NEEDS_REVIEW instead of a fabricated answer.
 
 API_BASE = "https://www.huduser.gov/hudapi/public/il/data"
-API_TOKEN = os.environ.get("HUD_API_TOKEN", "")
+def _resolve_token():
+    """HUD bearer token: env (dev) or AWS Secrets Manager via HUD_API_TOKEN_ARN (production path,
+    Review-2 — never a plaintext Lambda env value). Fail-closed: no token -> found:false -> review."""
+    v = os.environ.get("HUD_API_TOKEN", "")
+    if v:
+        return v
+    arn = os.environ.get("HUD_API_TOKEN_ARN", "")
+    if arn:
+        try:
+            import boto3
+            return (boto3.client("secretsmanager").get_secret_value(SecretId=arn).get("SecretString") or "")
+        except Exception:
+            return ""   # unreadable secret == source unavailable (never a fabricated lookup)
+    return ""
+
+
+API_TOKEN = _resolve_token()
 SOURCE = "US Dept of Housing and Urban Development (HUD USER) — Income Limits"
 
 

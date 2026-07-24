@@ -160,3 +160,49 @@ def test_concurrent_head_cas_retries():
     import os; os.environ["AUDIT_TABLE"] = "t"
     r = ev.record_event({"case_id": "C", "action": "a", "phase": "INTENT", "actor": "u", "payload": {"n": 1}}, ctx, source="unit")
     assert r["stored"] is True and cli.calls == 2          # first CAS lost, retried, then succeeded
+
+
+# ── Review-2 adversarial proof: TransactWriteItems cannot be abused to overwrite ──
+
+def test_every_transact_put_carries_a_condition_expression():
+    """DynamoDB Put inside a transaction REPLACES an item unless conditioned. Prove the evidence
+    service never issues an unconditioned Put: a strict client that rejects any Put lacking an
+    attribute_not_exists/tip-CAS ConditionExpression must accept every write record_event makes."""
+    captured = []
+    store = {}
+
+    class StrictClient(FakeDDBClient):
+        def transact_write_items(self, TransactItems):
+            for item in TransactItems:
+                assert "ConditionExpression" in item["Put"], "unconditioned transact Put (overwrite-capable!)"
+                captured.append(item["Put"]["ConditionExpression"])
+                assert ("attribute_not_exists" in item["Put"]["ConditionExpression"]
+                        or "chain_hash" in item["Put"]["ConditionExpression"])
+            return super().transact_write_items(TransactItems)
+
+    ev._clients = lambda region: (FakeResource(store), StrictClient(store), FakeS3())
+    ctx = type("C", (), {"invoked_function_arn": "arn:aws:lambda:us-east-1:111122223333:function:x"})()
+    import os; os.environ["AUDIT_TABLE"] = "t"
+    r = ev.record_event({"case_id": "ADV-1", "action": "assess", "phase": "INTENT",
+                         "actor": "t", "payload": {"x": 1}}, ctx, source="unit")
+    assert r["stored"] is True and captured, "no conditioned transact writes captured"
+
+
+def test_overwrite_of_existing_audit_id_is_refused_and_content_unchanged():
+    """Adversarial replay-with-DIFFERENT-content: same audit id, altered payload -> the conditioned
+    Put refuses (ConditionalCheckFailed) and the stored record is unchanged."""
+    store = {}; _install(store)
+    ctx = type("C", (), {"invoked_function_arn": "arn:aws:lambda:us-east-1:111122223333:function:x"})()
+    import os; os.environ["AUDIT_TABLE"] = "t"
+    first = ev.record_event({"case_id": "ADV-2", "action": "assess", "phase": "INTENT",
+                             "actor": "t", "payload": {"determination": "ELIGIBLE"}}, ctx, source="unit")
+    assert first["stored"] is True
+    aid = first["audit_id"]
+    original = dict(store[aid])
+    # same identity fields, DIFFERENT payload -> not an exact replay; conditioned Put must refuse,
+    # and record_event must fail loud (stored:false), leaving the original bytes intact.
+    second = ev.record_event({"case_id": "ADV-2", "action": "assess", "phase": "INTENT",
+                              "actor": "t", "payload": {"determination": "INELIGIBLE"},
+                              "audit_id": aid}, ctx, source="unit")
+    assert second.get("stored") is not True or second.get("audit_id") != aid
+    assert store[aid] == original, "audit record content changed after overwrite attempt"

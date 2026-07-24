@@ -136,3 +136,14 @@ def test_identity_creates_no_users_and_no_passwords():
 def test_no_default_password_anywhere_in_any_template():
     for t in (T_DATA, T_COMPUTE, T_WORKFLOW, T_IDENTITY):
         assert "ChangeMe" not in json.dumps(t.to_json())
+
+
+# ── Review-2: secrets are Secrets Manager resources, never plaintext env ─────
+
+def test_signing_and_hud_secrets_provisioned_and_no_plaintext():
+    tpl = T_COMPUTE.to_json()
+    types = [r["Type"] for r in tpl.get("Resources", {}).values()]
+    assert types.count("AWS::SecretsManager::Secret") >= 2   # signing + HUD token
+    s = json.dumps(tpl)
+    assert "PROVENANCE_SECRET_ARN" in s and "HUD_API_TOKEN_ARN" in s
+    assert '"PROVENANCE_SECRET"' not in s, "plaintext signing secret must not appear in the template"

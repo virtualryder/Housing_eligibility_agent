@@ -6,7 +6,7 @@ vault (with an explicit Deny on mutation/bypass); mask_pii can only Comprehend-d
 sanitized store; the assessor/guards only read the sanitized store; the drafter only invokes Bedrock.
 Exact ARNs are exported — nothing downstream discovers by name (P0-7)."""
 import aws_cdk as cdk
-from aws_cdk import aws_iam as iam, aws_lambda as lambda_
+from aws_cdk import aws_iam as iam, aws_lambda as lambda_, aws_secretsmanager as sm
 from constructs import Construct
 
 RUNTIME = lambda_.Runtime.PYTHON_3_12
@@ -23,9 +23,23 @@ class ComputeStack(cdk.Stack):
             "SANITIZED_TABLE": data.sanitized_table.table_name,
         }
         # Per-deploy signing secret binding mask_pii artifacts + HUD provenance (P0-1/P0-3-prov).
-        # Sandbox/dev: context-supplied env var. Production posture (P1-2): Secrets Manager + rotation.
+        # DEFAULT (Review-2): a generated AWS Secrets Manager secret, referenced by ARN — never
+        # plaintext in the template. A context-supplied plaintext secret remains available for
+        # disposable sandbox validation ONLY. HUD token is a separate operator-filled secret.
+        self.signing_secret = None
         if provenance_secret:
-            common_env["PROVENANCE_SECRET"] = provenance_secret
+            common_env["PROVENANCE_SECRET"] = provenance_secret   # sandbox-only path
+        else:
+            self.signing_secret = sm.Secret(
+                self, "SigningSecret", secret_name=f"{prefix}/provenance-signing",
+                description="HMAC signing secret for sanitized-artifact + HUD provenance (rotate via new version; consumers re-read on cold start)",
+                generate_secret_string=sm.SecretStringGenerator(password_length=64, exclude_punctuation=True),
+            )
+            common_env["PROVENANCE_SECRET_ARN"] = self.signing_secret.secret_arn
+        self.hud_token_secret = sm.Secret(
+            self, "HudTokenSecret", secret_name=f"{prefix}/hud-api-token",
+            description="HUD USER API bearer token (operator fills value; register at huduser.gov)",
+        )
 
         def fn(name, handler_module, env=None, timeout=30):
             f = lambda_.Function(
@@ -51,6 +65,14 @@ class ComputeStack(cdk.Stack):
         self.guards = fn("workflow-guards", "workflow_guards")
 
         # ── explicit least-privilege wiring ──────────────────────────────────
+        # Secrets (Review-2): signing secret readable ONLY by the sign/verify functions; HUD token
+        # readable ONLY by the lookup. No other principal; no plaintext in the template.
+        if self.signing_secret is not None:
+            for f in (self.mask, self.assess, self.recertify, self.overpayment,
+                      self.core, self.guards, self.lookup):
+                self.signing_secret.grant_read(f)
+        self.hud_token_secret.grant_read(self.lookup)
+        self.lookup.add_environment("HUD_API_TOKEN_ARN", self.hud_token_secret.secret_arn)
         # masking: detect PII + write the sanitized store (PutItem only)
         self.mask.add_to_role_policy(iam.PolicyStatement(
             actions=["comprehend:DetectPiiEntities"], resources=["*"]))

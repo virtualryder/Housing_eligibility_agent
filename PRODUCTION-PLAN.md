@@ -120,6 +120,64 @@ Validated SoR integrations (EIV/PIC/HMIS); formal customer domain-rule approval;
 
 P0-1↔"deidentified artifact", P0-2↔"deterministic controller", P0-3↔"token as arg", P0-4↔"fallback→manual review", P0-5↔"CDK", P0-6↔"default creds", P0-7↔"role by prefix", P0-8↔"threat model", P0-9↔"redaction tests", P0-10↔"narrow pilot", P0-11↔"tagged release + evidence", P0-12/P1-7↔"Object Lock retention". P1 items map to the review's P1 list; P2 to its P2 list.
 
+## 7b. Review-2 gap closure — the road to a real pilot (2026-07-24)
+
+*The second external review approved a controlled, non-production pilot "after several final
+deployment and operational items" and scored pilot-readiness 7.5/10. Every claim was verified against
+the repo (all accurate). Items are organized as three GATES; nothing advances past a gate until its
+items are green. Wording rule from the review, adopted permanently: this is an **"HCV preliminary
+income-screening and determination-drafting assistant"** — never an "eligibility adjudication
+platform."*
+
+### Gate A — before a synthetic-data / retrospective customer pilot (current work)
+
+| # | Item | Status |
+|---|---|---|
+| A1 | **Full AgentCore/Gateway/Cedar path in CDK** (runtime, gateway, targets, policy store, ENFORCE, guardrail, observability wiring) + assertions (all tools attached, policies loaded, ENFORCE on, no public endpoint, exact ARNs) | ☐ the big one — next build |
+| A2 | **Secrets Manager** for signing secret + HUD token (no plaintext in context/CFN/env; least-privilege grants; CloudTrail-visible reads; rotation via version) | ✅ **DONE** — `SigningSecret` + `HudTokenSecret` in CDK, ARN-based resolution cached + fail-closed (`provenance._secret`, `lookup_income_limit._resolve_token`), tests `test_secrets_path.py` + template assertion (no plaintext). Follow-on: separate keys per trust domain (deid vs HUD) |
+| A3 | **Adversarial audit-transaction proof** (TransactWriteItems cannot overwrite; every Put conditioned) | ✅ **DONE** — `test_audit_chain.py` +2 adversarial tests (was already enforced in code; now proven) |
+| A4 | **Live end-to-end happy path** with a real HUD token: authn → runtime → gateway → Cedar allow + outsider deny → forged-masking deny → live HUD + provenance → assess → draft → WORM → SoD approve → single finalize → chain verify → teardown | ☐ requires A1 + a HUD USER token (owner registers at huduser.gov; store in `hou-<env>/hud-api-token` secret) |
+| A5 | **Idempotent finalization + duplicate/replay protections** (duplicate submission, double approval, approval-after-change, expired approval, retried Lambda, audit-ok/finalize-fail recovery) | ☐ design exists (single-use sign-off token); needs implementation + tests |
+| A6 | **Minimum CloudWatch dashboards + alarms** as a CDK ObservabilityStack (security denies, forged refs, workflow stuck/failed, approval age, manual-review rate, audit-write failure, HUD availability, DLQ) | ☐ port the portfolio security-alarms pattern into CDK |
+| A7 | **DEPLOYMENT-GUIDE.md (CDK-only)** — prerequisites, quotas, deployment-role IAM, bootstrap, config matrix, secrets setup, IdP procedure, post-deploy validation script emitting the PASS/FAIL JSON, rollback/upgrade/uninstall, troubleshooting, time + cost | ☐ |
+| A8 | **Formal GitHub Release** for the validated tag (source archive, SBOM, checksums, validation evidence, known limitations, changelog) — a tag alone is not a release package | ☐ |
+| A9 | **Cedar policy property tests** (deny-by-default for every tool, role×tool matrix, agent-cannot-finalize, requester-cannot-approve, forbid-overrides-permit, new-tool-fails-CI-until-authorized) | ☐ |
+| A10 | **cdk-nag + CodeQL/Bandit + secret scanning + push protection + branch protection + CODEOWNERS** in CI | ☐ |
+| A11 | **Customer configuration worksheet + synthetic test dataset with expected results** | ☐ |
+| A12 | **Pilot support/ownership statement** (who operates, who escalates, exact pilot architecture) | ☐ |
+
+### Gate B — before real applicant PII (unchanged from P1, now ordered)
+
+Enterprise IdP federation + MFA (phishing-resistant) · private networking + egress control (VPC,
+endpoints, Network Firewall, HUD allowlist, WAF, throttling) · customer-managed KMS · **telemetry
+PII-leak canary** (unique fake-PII marker traced through every telemetry destination incl. Step
+Functions history, X-Ray, Bedrock logs, DLQs) · privacy impact assessment · customer security review ·
+customer-approved retention schedule (never assert 7y as universal) · access review + IR procedure +
+backup/recovery validation · load/concurrency/replay testing · PHA administrative-plan review ·
+accessibility review of notices · written data-processing responsibilities · **tenant isolation**:
+tenant derived from authenticated identity (never request body), tenant-keyed storage/audit, Cedar
+tenant conditions — until then, one PHA per isolated AWS environment, no SaaS multi-tenancy claims.
+
+### Gate C — before production
+
+Validated EIV/PIC/HMIS integration · PHA-approved full rules configuration · legal/policy review ·
+independent pen-test · ATO/StateRAMP · production ops model + SLOs · multi-account + DR ·
+exactly-once processing · model-risk + fairness/adverse-impact review · change control ·
+evidence-of-record completeness (every finalized case records: release tag, commit, model id,
+prompt/guardrail/rules/policy/masking versions, HUD year + provenance, input + artifact hashes,
+requester/approver, correlation id) · release-promotion/rollback pipeline · vulnerability management ·
+training + SOPs.
+
+### Adopted framing (use verbatim in every deck)
+
+> "This is a governed regulated-workflow accelerator demonstrating how Amazon Bedrock AgentCore,
+> deterministic rules, Cedar authorization, authoritative data, tamper-evident evidence and human
+> approval can be combined for high-consequence public-sector workflows."
+
+And for the CIO's "why is an LLM needed" question: *"It is not, for the deterministic portions. The
+LLM is used only where language generation or interpretation adds value; the eligibility calculation
+remains deterministic."*
+
 ## 8. Changelog
 
 - *(cycle 1)* Plan created; agent selected (Housing) after four-repo audit; decisions locked: CDK in-repo, P0+P1 → operational-pilot. Next: execute P0-1 (sanitized-artifact) with tests.

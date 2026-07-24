@@ -27,11 +27,31 @@ import os
 # asymmetric RS256/JWKS instead — see lib/connector/sor_api.py.)
 
 _SECRET_ENV = "PROVENANCE_SECRET"
+_SECRET_ARN_ENV = "PROVENANCE_SECRET_ARN"   # production path: AWS Secrets Manager (Review-2)
 _ALG = "HMAC-SHA256"
+_sm_cache = {}
 
 
 def _secret():
-    return (os.environ.get(_SECRET_ENV) or "").encode("utf-8")
+    """Resolve the signing secret. Production: Secrets Manager via PROVENANCE_SECRET_ARN (fetched at
+    init, cached for the Lambda lifetime; reads are CloudTrail-visible; rotation = new version picked
+    up on cold start). Dev/tests: PROVENANCE_SECRET env. Fail-closed: no secret -> nothing signs or
+    verifies as authoritative. Plaintext secrets in CDK context/CFN parameters are the sandbox-only
+    path and are being retired (see cdk/ SigningSecret + docs/THREAT-MODEL.md T5/T10)."""
+    v = os.environ.get(_SECRET_ENV) or ""
+    if v:
+        return v.encode("utf-8")
+    arn = os.environ.get(_SECRET_ARN_ENV) or ""
+    if arn:
+        if arn not in _sm_cache:
+            try:
+                import boto3
+                r = boto3.client("secretsmanager").get_secret_value(SecretId=arn)
+                _sm_cache[arn] = (r.get("SecretString") or "").encode("utf-8")
+            except Exception:
+                return b""   # fail-closed: unreadable secret -> nothing is authoritative
+        return _sm_cache[arn]
+    return b""
 
 
 def _norm(o):
