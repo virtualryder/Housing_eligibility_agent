@@ -33,6 +33,7 @@ class ComputeStack(cdk.Stack):
             "WORM_BUCKET": data.worm_bucket.bucket_name,
             "SANITIZED_TABLE": data.sanitized_table.table_name,
             "PENDING_TABLE": data.pending_table.table_name,
+            "CASE_TABLE": data.case_table.table_name,   # R3-2 pass-by-reference store
         }
         # Gate-B B5: the deployment's pinned tenant (one PHA per isolated deployment). Tenant identity
         # is DERIVED from this, never from any request body (lib/controls/tenancy.py).
@@ -96,6 +97,7 @@ class ComputeStack(cdk.Stack):
                 cmk.grant_decrypt(f)   # runtime decrypt of CMK-encrypted env vars (role policy)
             return f
 
+        self.ingest = fn("ingest-case", "ingest_case")   # R3-2: the only door for raw content
         self.intake = fn("intake-application", "intake_application")
         self.lookup = fn("lookup-income-limit", "lookup_income_limit")
         self.mask = fn("mask-pii", "mask_pii")
@@ -123,6 +125,12 @@ class ComputeStack(cdk.Stack):
             for f in (self.lookup, self.assess, self.guards):
                 self.signing_secret_hud.grant_read(f)
         self.hud_token_secret.grant_read(self.lookup)
+        # R3-2 case store: ingest WRITES raw content; intake + mask READ it (the only two consumers
+        # of raw text); the drafter WRITES the notice. Nothing else touches raw content.
+        data.case_table.grant(self.ingest, "dynamodb:PutItem")
+        data.case_table.grant(self.intake, "dynamodb:GetItem")
+        data.case_table.grant(self.mask, "dynamodb:GetItem")
+        data.case_table.grant(self.core, "dynamodb:PutItem")
         data.pending_table.grant(self.signoff_register, "dynamodb:PutItem")
         data.pending_table.grant_read_write_data(self.finalize)   # marker read path uses audit table; pending read for ops
         self.lookup.add_environment("HUD_API_TOKEN_ARN", self.hud_token_secret.secret_arn)
@@ -158,6 +166,7 @@ class ComputeStack(cdk.Stack):
         data.worm_bucket.grant_put(self.finalize)
 
         for name, f in {
+            "IngestArn": self.ingest,
             "IntakeArn": self.intake, "LookupArn": self.lookup, "MaskArn": self.mask,
             "AssessArn": self.assess, "CoreArn": self.core, "WriteAuditArn": self.write_audit,
             "RequestSignoffArn": self.request_signoff, "GuardsArn": self.guards,

@@ -46,6 +46,16 @@ class ObservabilityStack(cdk.Stack):
                   desc=f"{label} Lambda errors — a governance-critical function is failing "
                        f"({'masking' if label == 'Mask' else 'audit trail' if label == 'WriteAudit' else 'pipeline'} impact; fail-closed but investigate).")
 
+        # ── R3-3 security metrics: guard failures ARE security signals ───────
+        # workflow_guards emits EMF (Housing/Governance :: GuardFailed{Guard}) on every evaluation.
+        # A nonzero sum means forged/tampered/missing evidence hit a guard — page immediately.
+        guard_failed = cw.Metric(namespace="Housing/Governance", metric_name="GuardFailed",
+                                 statistic="Sum", period=cdk.Duration.minutes(5))
+        alarm("GuardFailures", guard_failed,
+              desc="A workflow guard REFUSED evidence (forged sanitized_ref, tampered HUD provenance, "
+                   "spoofed boolean, or source-down). Security signal - triage per THREAT-MODEL.md; "
+                   "repeated failures may indicate an active forgery attempt.")
+
         # ── dashboard: security · workflow · ops ─────────────────────────────
         dash = cw.Dashboard(self, "Dashboard", dashboard_name=f"{prefix}-operations")
         dash.add_widgets(
@@ -55,6 +65,13 @@ class ObservabilityStack(cdk.Stack):
             cw.GraphWidget(title="Governance Lambdas: errors", width=12,
                            left=[compute.mask.metric_errors(), compute.guards.metric_errors(),
                                  compute.write_audit.metric_errors(), compute.finalize.metric_errors()]),
+        )
+        dash.add_widgets(
+            cw.GraphWidget(title="SECURITY: guard failures (forged/tampered evidence refused)", width=12,
+                           left=[guard_failed]),
+            cw.GraphWidget(title="Sign-off gate: pending approvals (finalize invocations)", width=12,
+                           left=[compute.finalize.metric_invocations(),
+                                 compute.signoff_register.metric_invocations()]),
         )
         dash.add_widgets(
             cw.GraphWidget(title="Governance Lambdas: duration p95", width=12,

@@ -21,7 +21,9 @@ release's clean-account validation run and MUST NOT be asserted before capture.*
 | CDK synth + assertions (`tests/test_cdk_stacks.py`) | **passing** — templates synthesize; retention/IAM/state-machine assertions hold |
 | Security scans (ruff bug-classes, pip-audit, SBOM) | via `.github/workflows/ci.yml` on every push |
 
-## Clean-account validation run (deploy -> prove -> destroy) — ✅ CAPTURED 2026-07-24
+## P0-11 clean-account validation run (deploy -> prove -> destroy) — ✅ CAPTURED 2026-07-24
+*(Historical capture — test counts quoted below are as-of that run; the current suite count is in the
+table above. Counts inside dated capture sections are never retro-edited.)*
 
 Full narrative + raw values: [`evidence/P0-11-VALIDATION-RUN.md`](evidence/P0-11-VALIDATION-RUN.md).
 

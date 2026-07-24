@@ -317,6 +317,21 @@ def test_aws_managed_mode_has_no_cmk_and_still_synthesizes():
     assert '"AWS::KMS::Key"' not in s   # default mode: no CMK resources in compute
 
 
+# ── R3-2: ZERO-PII state machine — only opaque refs cross Step Functions ─────
+
+def test_workflow_state_carries_no_raw_content():
+    """The controller's definition must never reference raw content paths: execution input is
+    {case_id, requester, case_ref}; intake+mask receive case_ref; the drafter receives only the
+    signed sanitized_ref (loads text server-side) and returns notice_ref."""
+    asl = json.dumps(T_WORKFLOW.to_json())
+    assert "$.application" not in asl, "raw application must never enter Step Functions state"
+    assert "masked_case" not in asl, "masked content must not cross state (server-side store only)"
+    assert "case_ref" in asl
+    tpl = json.dumps(T_COMPUTE.to_json())
+    assert "ingest-case" in tpl                      # the one door for raw content
+    assert '"CASE_TABLE"' in tpl                     # encrypted pass-by-reference store wired
+
+
 # ── GA-6: observability stack — alarms + dashboard exist and page via SNS ────
 
 def test_observability_stack_alarms_and_dashboard():

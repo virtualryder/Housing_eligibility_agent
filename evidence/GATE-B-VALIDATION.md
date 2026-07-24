@@ -83,6 +83,29 @@ telemetry. Step Functions history carries the raw case (87 marker occurrences): 
 quantified Gate-B remediation item — pass the case by reference through the controller. `--strict`
 (every destination clean) is the Gate-B exit bar and intentionally does not pass yet.
 
+---
+
+# ADDENDUM (2026-07-24, Review-3 remediation): STRICT CANARY ✅ PASS — zero PII in Step Functions history
+
+The pass-by-reference orchestration (R3-2) was built and validated live the same day (`hou-valc`,
+public-mode data+compute+workflow): raw content now enters ONLY through the `ingest-case` Lambda
+into the encrypted, TTL'd, tenant-scoped case store; the execution starts with
+`{case_id, requester, case_ref}`; intake and mask fetch content server-side by ref; mask returns NO
+masked text into state; the drafter loads the masked artifact server-side and returns `notice_ref`.
+
+Live capture, marked canary case `CANARY-3BB860292C02-TELEMETRYPROBE`:
+
+```
+ingest response content-free:  True   (ref only — case-fccc8cd2…)
+pipeline: Extract→…→HumanSignoff→approve→Finalize → SUCCEEDED, FINAL# marker exactly once
+STRICT sweep (ALL destinations must be clean):
+  verdict: PASS    leaks: {}     <- CloudWatch Logs 0 · X-Ray 0 · DLQs 0 · SFN history 0
+```
+
+The previous run's 87-hit finding is REMEDIATED: the Gate-B strict exit bar for telemetry is now
+met. CDK assertion pins it (`test_workflow_state_carries_no_raw_content`: the state machine
+definition may never reference `$.application` or `masked_case`).
+
 ## Live-run findings (found → fixed → committed, this run)
 
 1. **Env-agnostic AZ tokens break the per-AZ firewall-endpoint `Fn::GetAtt`** — the DescribeFirewall

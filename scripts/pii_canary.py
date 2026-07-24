@@ -161,11 +161,19 @@ def main():
 
     if args.execute and not args.sweep_only:
         case = build_canary_case(marker)
+        # R3-2 pass-by-reference: raw content enters ONLY through the ingest Lambda; the execution
+        # starts with an opaque case_ref (this is exactly what the strict sweep verifies).
+        lam = boto3.client("lambda")
+        ing = json.loads(lam.invoke(
+            FunctionName=f"{args.prefix}-ingest-case",
+            Payload=json.dumps({"application": case["application_text"],
+                                "case_id": case["case_id"]}).encode())["Payload"].read())
         sfn = boto3.client("stepfunctions")
         arn = next(m["stateMachineArn"] for m in sfn.list_state_machines()["stateMachines"]
                    if m["name"].startswith(args.prefix))
         sfn.start_execution(stateMachineArn=arn, name=f"pii-canary-{marker[7:19].lower()}",
-                            input=json.dumps(case))
+                            input=json.dumps({"case_id": case["case_id"], "requester": "canary",
+                                              "case_ref": ing["case_ref"]}))
         print(f"canary execution started (marker {marker}); waiting {args.wait}s for telemetry...",
               file=sys.stderr)
         time.sleep(args.wait)

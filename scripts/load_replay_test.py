@@ -73,6 +73,7 @@ def _cases():
 def run_load(prefix, n):
     import boto3
     sfn = boto3.client("stepfunctions")
+    lam = boto3.client("lambda")
     arn = next(m["stateMachineArn"] for m in sfn.list_state_machines()["stateMachines"]
                if m["name"].startswith(prefix))
     cases = _cases()
@@ -81,8 +82,16 @@ def run_load(prefix, n):
         case = dict(cases[i % len(cases)])
         case["case_id"] = f"HOU-LOAD-{uuid.uuid4().hex[:6].upper()}"
         t0 = time.time()
+        # R3-2 pass-by-reference: ingest raw content first; start with the opaque ref only.
+        raw = case.get("application") or case.get("application_text") or json.dumps(case)
+        ing = json.loads(lam.invoke(FunctionName=f"{prefix}-ingest-case",
+                                    Payload=json.dumps({"application": raw,
+                                                        "case_id": case["case_id"]}).encode()
+                                    )["Payload"].read())
         ex = sfn.start_execution(stateMachineArn=arn, name=f"load-{case['case_id'].lower()}",
-                                 input=json.dumps(case))["executionArn"]
+                                 input=json.dumps({"case_id": case["case_id"],
+                                                   "requester": "load-harness",
+                                                   "case_ref": ing["case_ref"]}))["executionArn"]
         while True:
             d = sfn.describe_execution(executionArn=ex)
             if d["status"] != "RUNNING":

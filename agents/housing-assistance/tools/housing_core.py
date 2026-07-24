@@ -76,8 +76,19 @@ def _draft(e):
         notice = resp["output"]["message"]["content"][0]["text"].strip()
         if resp.get("stopReason") == "guardrail_intervened" and not notice:
             return {"error": "output guardrail blocked the draft (fail-closed)", "drafted_by": None, "guardrail": "BLOCKED"}
-        return {"drafted_by": DRAFT_MODEL_ID, "chars": len(notice),
-                "guardrail_applied": bool(GUARDRAIL_ID), "deidentified_input": True, "notice": notice}
+        out = {"drafted_by": DRAFT_MODEL_ID, "chars": len(notice),
+               "guardrail_applied": bool(GUARDRAIL_ID), "deidentified_input": True}
+        # R3-2 pass-by-reference: with a case store configured, the notice (content, even though
+        # de-identified) is stored server-side and only an opaque notice_ref returns into Step
+        # Functions state; the approver fetches it by ref. Without a store (dev/direct calls) the
+        # text returns inline as before.
+        import os
+        if os.environ.get("CASE_TABLE"):
+            import case_store
+            out["notice_ref"] = case_store.put_case(notice, kind="notice")
+        else:
+            out["notice"] = notice
+        return out
     except (BotoCoreError, ClientError, KeyError, IndexError) as exc:
         return {"error": "draft failed: " + type(exc).__name__ + ": " + str(exc), "drafted_by": None}
 

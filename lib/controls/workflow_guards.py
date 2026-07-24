@@ -103,14 +103,35 @@ _GUARDS = {
 }
 
 
+def _emit_metric(guard, ok):
+    """R3-3 security telemetry: every guard evaluation emits a CloudWatch EMF metric
+    (Housing/Governance :: GuardFailed{Guard}). A failed guard is a SECURITY SIGNAL — forged
+    sanitized_ref, tampered provenance, spoofed boolean — not just an ops event; the
+    ObservabilityStack alarms on any nonzero sum. Metric only (no payload content), so this adds
+    nothing to the telemetry PII surface."""
+    import json as _json
+    import time as _time
+    try:
+        print(_json.dumps({
+            "_aws": {"Timestamp": int(_time.time() * 1000),
+                     "CloudWatchMetrics": [{"Namespace": "Housing/Governance",
+                                            "Dimensions": [["Guard"]],
+                                            "Metrics": [{"Name": "GuardFailed", "Unit": "Count"}]}]},
+            "Guard": guard, "GuardFailed": 0 if ok else 1}))
+    except Exception:
+        pass   # metrics must never affect the control decision
+
+
 def handler(event, context):
     e = _coerce(event)
     name = str(e.get("guard", ""))
     fn = _GUARDS.get(name)
     if fn is None:
+        _emit_metric(name or "unknown", False)
         return {"guard": name, "ok": False, "reason": "unknown guard (fail-closed)"}
     try:
         ok, reason = fn(e)
     except Exception as exc:  # any guard error is a fail-closed deny, never a pass
         ok, reason = False, "guard error (fail-closed): %s" % type(exc).__name__
+    _emit_metric(name, ok)
     return {"guard": name, "ok": bool(ok), "reason": reason}

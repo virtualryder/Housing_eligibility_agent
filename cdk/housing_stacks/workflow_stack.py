@@ -39,8 +39,12 @@ class WorkflowStack(cdk.Stack):
                                     comment="Fail-closed: evidence missing/unverified -> NEEDS_REVIEW "
                                             "for a housing specialist; no automated outcome.")
 
+        # R3-2 ZERO-PII STATE: the execution is started with {case_id, requester, case_ref} — the
+        # raw application NEVER enters Step Functions state (it lives in the encrypted case store;
+        # `scripts/`/the intake API call the ingest-case Lambda first). The canary's strict gate
+        # (`pii_canary.py --strict`) holds the controller to zero content in execution history.
         extract = invoke("Extract", compute.intake,
-                         {"application.$": "$.application"}, "$.extract")
+                         {"case_ref.$": "$.case_ref"}, "$.extract")
         g_extracted = guard("GuardExtracted", "extracted", {"fields.$": "$.extract.out.fields"})
 
         lookup = invoke("LookupIncomeLimit", compute.lookup,
@@ -52,7 +56,7 @@ class WorkflowStack(cdk.Stack):
                        {"lookup.$": "$.lookup.out",
                         "household_size.$": "$.extract.out.fields.household_size"})
 
-        mask = invoke("MaskPii", compute.mask, {"case.$": "$.application"}, "$.mask")
+        mask = invoke("MaskPii", compute.mask, {"case_ref.$": "$.case_ref"}, "$.mask")
         g_deid = guard("GuardDeidentified", "deidentified",
                        {"sanitized_ref.$": "$.mask.out.sanitized_ref"})
 
@@ -65,9 +69,10 @@ class WorkflowStack(cdk.Stack):
                         "$.assessment")
         g_rules = guard("GuardRulesExecuted", "rules_executed", {"assessment.$": "$.assessment.out"})
 
+        # R3-2: no content in the payload — the drafter loads the masked text SERVER-SIDE from the
+        # sanitized-artifact store via the signed ref, and returns notice_ref (not the notice text).
         draft = invoke("DraftNotice", compute.core,
-                       {"case.$": "$.mask.out.masked_case",
-                        "determination.$": "States.JsonToString($.assessment.out)",
+                       {"determination.$": "States.JsonToString($.assessment.out)",
                         "deidentified": True, "sanitized_ref.$": "$.mask.out.sanitized_ref"},
                        "$.draft")
         audit_intent = invoke("AuditIntent", compute.write_audit,

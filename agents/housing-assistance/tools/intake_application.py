@@ -25,7 +25,16 @@ def _num(s):
 
 def handler(event, context):
     e = _coerce(event)
+    # R3-2 pass-by-reference: the controller hands an OPAQUE case_ref (raw content never travels
+    # through Step Functions state); fetch server-side. Inline `application` remains for direct/dev
+    # calls only.
     text = e.get("application", "")
+    if not text and e.get("case_ref"):
+        import case_store
+        text = case_store.get_case(e["case_ref"]) or ""
+        if not text:
+            return {"structured": False, "fields": {}, "missing_required": ["application"],
+                    "error": "case_ref unresolved (unknown ref or wrong tenant) - fail-closed"}
     if not isinstance(text, str):
         text = json.dumps(text)
     low = text.lower()

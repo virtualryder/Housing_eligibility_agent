@@ -2,7 +2,15 @@
 
 [![CI](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml)
 
-> **Part of the Governed Agent Platform.** This agent is being consolidated into the [governed-agent-platform](https://github.com/virtualryder/governed-agent-platform) monorepo, where all four verticals share one versioned governance core (`governed-core`) and deploy via AWS CDK infrastructure-as-code (deployed + validated live) in place of the shell engine. This repo remains the standalone, shell-deployable reference.
+> **SUPPORTED DEPLOYMENT PATH — read this first.** The ONE supported path is **AWS CDK at the
+> validated release tag [`v0.9.2`](https://github.com/virtualryder/Housing_eligibility_agent/releases/tag/v0.9.2)**
+> (`cdk/` — includes the AgentCore Gateway/Cedar attachment as IaC), per
+> [`DEPLOYMENT-GUIDE.md`](DEPLOYMENT-GUIDE.md) and [`VALIDATED_RELEASE.md`](VALIDATED_RELEASE.md).
+> The shell engine (`lib/engine/`) is **legacy/internal reference only** — do not deploy it for a
+> customer. Product framing: this is a **governed HCV intake and preliminary income-screening
+> accelerator** — it is not, and does not claim to be, a complete eligibility adjudication system.
+>
+> *Part of the Governed Agent Platform: also being consolidated into the [governed-agent-platform](https://github.com/virtualryder/governed-agent-platform) monorepo, where all four verticals share one versioned governance core.*
 
 > **Continuous validation.** On every push CI runs the **governance-core integrity gate** (`lib/verify_core.py`, so the shared core must match its pinned `core.lock` and drift cannot merge unnoticed), manifest render, the unit + eval suite, and a bug-class lint, plus a **supply-chain job** that audits the pinned runtime dependencies (`pip-audit`) and emits a CycloneDX SBOM. An **opt-in** end-to-end job (`.github/workflows/e2e.yml`, manual `workflow_dispatch`) deploys the spine to a sandbox AWS account, proves it live with the demo in ENFORCE, and tears it down — see the workflow header for one-time setup.
 
@@ -84,6 +92,36 @@ under [`evidence/`](evidence/):
   constraints, an orphaned-engine conflict, a CloudFormation async-invoke stall, an env-agnostic AZ
   token in the firewall routing, a stack-ordering race) — every one fixed, regression-tested, and
   documented in the evidence. That is what the validation step is for.
+
+### What is actually validated vs. what is not
+
+| Claim | Status |
+|---|---|
+| CDK deployment path incl. AgentCore Gateway/Cedar as IaC | ✅ live-validated (2×), captured evidence |
+| Full governed pipeline end-to-end on live services | ✅ live-validated, incl. inside the private-network posture |
+| Fail-closed controls (forged ref / spoofed boolean / source-down) | ✅ live-validated |
+| Exactly-once finalize under a concurrent replay storm | ✅ live-validated (`FIRST:1, IDEMPOTENT:9`) |
+| Gate-B switches (private egress, CMK, MFA identity, tenant pinning) | ✅ live-validated (one clean-account run, all on) |
+| PII kept out of CloudWatch Logs / X-Ray / DLQs | ✅ live-validated (canary, 0 hits) |
+| Enterprise IdP round-trip with a customer IdP | ❌ engagement work (IaC hook is assertion-proven only) |
+| EIV / PIC / HMIS system-of-record integration | ❌ stubbed — adopter work |
+| Independent penetration test / third-party security review | ❌ not performed |
+| Multi-account governance/evidence isolation | ❌ reference architecture only |
+| Business ROI (staff-time savings) | ❌ hypothesis — measured in the customer pilot |
+
+### Known open issues (tracked, honestly)
+
+1. ~~Step Functions execution history carries the raw case~~ — **CLOSED (2026-07-24)**:
+   pass-by-reference orchestration shipped (raw content enters only via `ingest-case` into the
+   encrypted case store; only opaque refs cross the controller) and the **strict PII canary passed
+   live: zero marker hits in every destination including SFN history**
+   ([`evidence/GATE-B-VALIDATION.md`](evidence/GATE-B-VALIDATION.md) addendum). A CDK assertion pins
+   the property.
+2. Provenance key lifecycle: rotation runbook + key-version stamping beyond the GA-2 domain split.
+3. Load validated at 10-way concurrency; production-scale (50–100+) and partial-failure/recovery
+   testing remain.
+4. Customer-owned governance signatures (PIA, retention, IR, access review, backup/recovery
+   exercise) pending per [`docs/GATE-B-CHECKLIST.md`](docs/GATE-B-CHECKLIST.md).
 
 ---
 
