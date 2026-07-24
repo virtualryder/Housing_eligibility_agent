@@ -6,7 +6,7 @@ vault (with an explicit Deny on mutation/bypass); mask_pii can only Comprehend-d
 sanitized store; the assessor/guards only read the sanitized store; the drafter only invokes Bedrock.
 Exact ARNs are exported — nothing downstream discovers by name (P0-7)."""
 import aws_cdk as cdk
-from aws_cdk import aws_iam as iam, aws_lambda as lambda_, aws_secretsmanager as sm
+from aws_cdk import aws_iam as iam, aws_kms as kms, aws_lambda as lambda_, aws_logs as logs, aws_secretsmanager as sm
 from constructs import Construct
 
 RUNTIME = lambda_.Runtime.PYTHON_3_12
@@ -17,6 +17,16 @@ class ComputeStack(cdk.Stack):
                  provenance_secret: str = "", **kw):
         super().__init__(scope, cid, **kw)
         code = lambda_.Code.from_asset(asset_dir)
+        # Gate-B (customer-managed KMS): when the DataStack was deployed with kms=customer-managed,
+        # the SAME CMK protects this stack's secrets, Lambda environment variables, and log groups —
+        # one customer-controlled key over every place case data or key material can rest.
+        # IMPORTED by ARN (not the concrete Key object): grants then land on the FUNCTION ROLES in
+        # this stack instead of rewriting the key policy in the data stack, which would create a
+        # cross-stack dependency cycle. Service principals that need the key policy itself (logs,
+        # cloudwatch) are pre-authorized in the DataStack key policy.
+        cmk = None
+        if getattr(data, "cmk", None) is not None:
+            cmk = kms.Key.from_key_arn(self, "DataCmk", data.cmk.key_arn)
         common_env = {
             "AUDIT_TABLE": data.audit_table.table_name,
             "WORM_BUCKET": data.worm_bucket.bucket_name,
@@ -39,26 +49,39 @@ class ComputeStack(cdk.Stack):
             self.signing_secret_deid = sm.Secret(
                 self, "SigningSecretDeid", secret_name=f"{prefix}/provenance-signing-deid",
                 description="GA-2 deid-domain HMAC key: signs mask_pii sanitized-artifact refs ONLY (rotate via new version; consumers re-read on cold start)",
-                generate_secret_string=gen)
+                generate_secret_string=gen, encryption_key=cmk)
             self.signing_secret_hud = sm.Secret(
                 self, "SigningSecretHud", secret_name=f"{prefix}/provenance-signing-hud",
                 description="GA-2 HUD-domain HMAC key: signs authoritative income-limit provenance ONLY (rotate via new version; consumers re-read on cold start)",
-                generate_secret_string=gen)
+                generate_secret_string=gen, encryption_key=cmk)
             common_env["PROVENANCE_SECRET_ARN_DEID"] = self.signing_secret_deid.secret_arn
             common_env["PROVENANCE_SECRET_ARN_HUD"] = self.signing_secret_hud.secret_arn
         self.hud_token_secret = sm.Secret(
             self, "HudTokenSecret", secret_name=f"{prefix}/hud-api-token",
             description="HUD USER API bearer token (operator fills value; register at huduser.gov)",
+            encryption_key=cmk,
         )
 
         def fn(name, handler_module, env=None, timeout=30):
+            # Gate-B: with a CMK, each function gets an EXPLICIT CMK-encrypted log group (Lambda's
+            # implicit log groups are AES-256 only) and CMK-encrypted environment variables.
+            log_group = None
+            if cmk is not None:
+                log_group = logs.LogGroup(
+                    self, name.replace("-", " ").title().replace(" ", "") + "Logs",
+                    log_group_name=f"/aws/lambda/{prefix}-{name}",
+                    encryption_key=cmk, retention=logs.RetentionDays.ONE_YEAR,
+                    removal_policy=cdk.RemovalPolicy.DESTROY)
             f = lambda_.Function(
                 self, name.replace("-", " ").title().replace(" ", ""),
                 function_name=f"{prefix}-{name}", runtime=RUNTIME, code=code,
                 handler=f"{handler_module}.handler",
                 timeout=cdk.Duration.seconds(timeout), memory_size=256,
                 environment={**common_env, **(env or {})},
+                environment_encryption=cmk, log_group=log_group,
             )
+            if cmk is not None:
+                cmk.grant_decrypt(f)   # runtime decrypt of CMK-encrypted env vars (role policy)
             return f
 
         self.intake = fn("intake-application", "intake_application")

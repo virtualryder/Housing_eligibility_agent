@@ -53,7 +53,7 @@ compute = ComputeStack(app, f"{prefix}-compute", prefix=prefix, asset_dir=asset_
 workflow = WorkflowStack(app, f"{prefix}-workflow", prefix=prefix, compute=compute, data=data)
 identity = IdentityStack(app, f"{prefix}-identity", prefix=prefix)
 observability = ObservabilityStack(app, f"{prefix}-observability", prefix=prefix,
-                                   compute=compute, workflow=workflow)
+                                   compute=compute, workflow=workflow, data=data)
 gateway = GatewayStack(app, f"{prefix}-gateway", prefix=prefix, compute=compute, identity=identity)
 
 for s in (data, compute, workflow, identity, observability, gateway):

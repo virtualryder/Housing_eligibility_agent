@@ -182,6 +182,46 @@ def test_ga2_domain_keys_are_separate_secrets_with_split_grants():
         "mask_pii must read ONLY the deid-domain key"
 
 
+# ── Gate-B: customer-managed KMS reaches secrets, env, logs, SNS ─────────────
+
+def test_customer_managed_kms_covers_secrets_env_logs_and_sns():
+    from housing_stacks.observability_stack import ObservabilityStack
+    app = aws_cdk.App()
+    asset = stage_lambda_bundle()
+    data = DataStack(app, "kd", prefix="hou-kms", retention_profile="pilot", kms_mode="customer-managed")
+    compute = ComputeStack(app, "kc", prefix="hou-kms", asset_dir=asset, data=data)
+    workflow = WorkflowStack(app, "kw", prefix="hou-kms", compute=compute, data=data)
+    obs = ObservabilityStack(app, "ko", prefix="hou-kms", compute=compute, workflow=workflow, data=data)
+
+    d = json.dumps(Template.from_stack(data).to_json())
+    assert '"AWS::KMS::Key"' in d and '"EnableKeyRotation": true' in d.replace(" true", " true")
+
+    ct = Template.from_stack(compute).to_json()
+    cs = json.dumps(ct)
+    res = ct.get("Resources", {})
+    # every secret CMK-encrypted
+    for lid, r in res.items():
+        if r["Type"] == "AWS::SecretsManager::Secret":
+            assert "KmsKeyId" in r["Properties"], f"{lid} must use the customer-managed key"
+    # every function: CMK env encryption + an explicit CMK-encrypted log group
+    fns = [r for r in res.values() if r["Type"] == "AWS::Lambda::Function"]
+    lgs = [r for r in res.values() if r["Type"] == "AWS::Logs::LogGroup"]
+    assert fns and len(lgs) >= len(fns), "each function needs an explicit CMK log group"
+    for r in fns:
+        assert "KmsKeyArn" in r["Properties"], "Lambda environment must be CMK-encrypted"
+    for r in lgs:
+        assert "KmsKeyId" in r["Properties"], "log groups must be CMK-encrypted"
+    # SNS ops topic CMK-encrypted
+    ot = Template.from_stack(obs).to_json()
+    topics = [r for r in ot.get("Resources", {}).values() if r["Type"] == "AWS::SNS::Topic"]
+    assert topics and all("KmsMasterKeyId" in t["Properties"] for t in topics)
+
+
+def test_aws_managed_mode_has_no_cmk_and_still_synthesizes():
+    s = json.dumps(T_COMPUTE.to_json())
+    assert '"AWS::KMS::Key"' not in s   # default mode: no CMK resources in compute
+
+
 # ── GA-6: observability stack — alarms + dashboard exist and page via SNS ────
 
 def test_observability_stack_alarms_and_dashboard():

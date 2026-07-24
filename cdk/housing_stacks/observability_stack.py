@@ -4,14 +4,21 @@ Dashboards + alarms an operations team can actually run the pilot with. Sources 
 (no app instrumentation required) plus metric filters staged for the custom security signals. SNS is
 the pager seam (subscribe email/PagerDuty at deploy)."""
 import aws_cdk as cdk
-from aws_cdk import aws_cloudwatch as cw, aws_cloudwatch_actions as cwa, aws_sns as sns
+from aws_cdk import aws_cloudwatch as cw, aws_cloudwatch_actions as cwa, aws_kms as kms, aws_sns as sns
 from constructs import Construct
 
 
 class ObservabilityStack(cdk.Stack):
-    def __init__(self, scope: Construct, cid: str, *, prefix: str, compute, workflow, **kw):
+    def __init__(self, scope: Construct, cid: str, *, prefix: str, compute, workflow,
+                 data=None, **kw):
         super().__init__(scope, cid, **kw)
-        topic = sns.Topic(self, "Alarms", topic_name=f"{prefix}-ops-alarms")
+        # Gate-B: ops alarms may carry case ids — under customer-managed KMS the topic is CMK-encrypted.
+        # Imported key reference (see compute_stack): cloudwatch.amazonaws.com is pre-authorized in
+        # the DataStack key policy so alarms can publish to the encrypted topic.
+        cmk = None
+        if data is not None and getattr(data, "cmk", None) is not None:
+            cmk = kms.Key.from_key_arn(self, "DataCmk", data.cmk.key_arn)
+        topic = sns.Topic(self, "Alarms", topic_name=f"{prefix}-ops-alarms", master_key=cmk)
 
         def alarm(name, metric, threshold=0, eval_periods=1, desc=""):
             a = cw.Alarm(self, name, metric=metric, threshold=threshold,

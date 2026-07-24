@@ -1,7 +1,7 @@
 """DataStack — audit ledger, sanitized-artifacts store (P0-1), WORM evidence vault with configurable
 retention profiles incl. COMPLIANCE (P0-12), optional customer-managed KMS."""
 import aws_cdk as cdk
-from aws_cdk import aws_dynamodb as ddb, aws_kms as kms, aws_s3 as s3
+from aws_cdk import aws_dynamodb as ddb, aws_iam as iam, aws_kms as kms, aws_s3 as s3
 from constructs import Construct
 
 # P0-12 retention profiles (docs/RETENTION-PROFILES.md). GOVERNANCE/1d is SANDBOX ONLY.
@@ -28,6 +28,21 @@ class DataStack(cdk.Stack):
                                enable_key_rotation=True,
                                removal_policy=cdk.RemovalPolicy.RETAIN)
             enc_ddb = ddb.TableEncryption.CUSTOMER_MANAGED
+            # Gate-B: consumer stacks (compute/observability) use this key via an IMPORTED reference
+            # (avoids a cross-stack policy cycle), so the SERVICE principals that must use the key on
+            # the customer's behalf are pre-authorized HERE, scoped by encryption context / source:
+            # CloudWatch Logs (CMK-encrypted Lambda log groups) and CloudWatch alarms -> SNS.
+            self.cmk.add_to_resource_policy(iam.PolicyStatement(
+                principals=[iam.ServicePrincipal(f"logs.{self.region}.amazonaws.com")],
+                actions=["kms:Encrypt*", "kms:Decrypt*", "kms:ReEncrypt*",
+                         "kms:GenerateDataKey*", "kms:Describe*"],
+                resources=["*"],
+                conditions={"ArnLike": {"kms:EncryptionContext:aws:logs:arn":
+                                        f"arn:aws:logs:{self.region}:{self.account}:log-group:/aws/lambda/{prefix}-*"}}))
+            self.cmk.add_to_resource_policy(iam.PolicyStatement(
+                principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com")],
+                actions=["kms:Decrypt", "kms:GenerateDataKey*"],
+                resources=["*"]))
 
         # Append-only audit ledger (hash-chained by lib/controls/evidence.py; IAM denies mutation).
         self.audit_table = ddb.Table(
