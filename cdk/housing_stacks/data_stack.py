@@ -49,6 +49,15 @@ class DataStack(cdk.Stack):
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
 
+        # Sign-off pending-approvals table (GA-4 gap fix: the register/approve path needs it).
+        self.pending_table = ddb.Table(
+            self, "PendingApprovals", table_name=f"{prefix}-pending-approvals",
+            partition_key=ddb.Attribute(name="case_id", type=ddb.AttributeType.STRING),
+            billing_mode=ddb.BillingMode.PAY_PER_REQUEST,
+            encryption=enc_ddb, encryption_key=self.cmk,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+        )
+
         # WORM evidence vault (Object Lock; retention per profile).
         self.worm_bucket = s3.Bucket(
             self, "WormVault",

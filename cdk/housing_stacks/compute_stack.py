@@ -21,6 +21,7 @@ class ComputeStack(cdk.Stack):
             "AUDIT_TABLE": data.audit_table.table_name,
             "WORM_BUCKET": data.worm_bucket.bucket_name,
             "SANITIZED_TABLE": data.sanitized_table.table_name,
+            "PENDING_TABLE": data.pending_table.table_name,
         }
         # Per-deploy signing secret binding mask_pii artifacts + HUD provenance (P0-1/P0-3-prov).
         # DEFAULT (Review-2): a generated AWS Secrets Manager secret, referenced by ARN — never
@@ -72,6 +73,8 @@ class ComputeStack(cdk.Stack):
                       self.core, self.guards, self.lookup):
                 self.signing_secret.grant_read(f)
         self.hud_token_secret.grant_read(self.lookup)
+        data.pending_table.grant(self.signoff_register, "dynamodb:PutItem")
+        data.pending_table.grant_read_write_data(self.finalize)   # marker read path uses audit table; pending read for ops
         self.lookup.add_environment("HUD_API_TOKEN_ARN", self.hud_token_secret.secret_arn)
         # masking: detect PII + write the sanitized store (PutItem only)
         self.mask.add_to_role_policy(iam.PolicyStatement(
@@ -99,6 +102,10 @@ class ComputeStack(cdk.Stack):
         data.audit_table.grant(self.request_signoff, "dynamodb:PutItem",
                                "dynamodb:GetItem", "dynamodb:TransactWriteItems")
         data.worm_bucket.grant_put(self.request_signoff)
+        # finalize: writes the COMMITTED evidence + the exactly-once FINAL# marker (conditional put)
+        data.audit_table.grant(self.finalize, "dynamodb:PutItem",
+                               "dynamodb:GetItem", "dynamodb:TransactWriteItems")
+        data.worm_bucket.grant_put(self.finalize)
 
         for name, f in {
             "IntakeArn": self.intake, "LookupArn": self.lookup, "MaskArn": self.mask,

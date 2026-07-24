@@ -80,10 +80,16 @@ def _create(cc, ssm, p, region, acct):
 
 
 def _delete(cc, ssm, p, gw_id):
+    # Live-run find: rollback of a FAILED create may target a gateway that was never created.
+    # Delete must be tolerant of every absent resource (idempotent), never raise on not-found.
     try:
         eng = cc.get_gateway(gatewayIdentifier=gw_id)["policyEngineConfiguration"]["arn"].split("/")[-1]
     except Exception:
-        eng = None
+        try:
+            ssm.delete_parameter(Name=p.get("SsmParam", ""))
+        except Exception:
+            pass
+        return   # nothing was created; nothing to tear down
     if eng:
         for pol in cc.list_policies(policyEngineId=eng).get("policies", []):
             try:

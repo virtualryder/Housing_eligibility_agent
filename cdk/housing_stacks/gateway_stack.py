@@ -66,7 +66,7 @@ class GatewayStack(cdk.Stack):
 
         gw_role = iam.Role(self, "GatewayRole",
                            assumed_by=iam.ServicePrincipal("bedrock-agentcore.amazonaws.com"),
-                           description="AgentCore gateway execution role — invoke ONLY the governed tool Lambdas")
+                           description="AgentCore gateway execution role - invoke ONLY the governed tool Lambdas")
         for t in _targets_from_manifest(compute):
             pass  # arns granted below via explicit list (single evaluation)
         targets = _targets_from_manifest(compute)
@@ -94,7 +94,7 @@ class GatewayStack(cdk.Stack):
         attachment = cdk.CustomResource(
             self, "AgentCoreAttachment", service_token=provider_fn.function_arn,
             properties={
-                "EngineName": f"{prefix}_housing_authz",
+                "EngineName": f"{prefix.replace(chr(45), chr(95))}_housing_authz",   # API: ^[A-Za-z][A-Za-z0-9_]*$ (live-run find)
                 "EngineDesc": "Deny-by-default Cedar authz (IaC-attached)",
                 "GatewayName": f"{prefix}-housing-gw",
                 "GatewayDesc": "Housing governed tool gateway (IaC-attached)",
