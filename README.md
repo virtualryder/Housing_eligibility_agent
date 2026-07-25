@@ -3,7 +3,7 @@
 [![CI](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml)
 
 > **SUPPORTED DEPLOYMENT PATH — read this first.** The ONE supported path is **AWS CDK at the
-> validated release tag [`v0.9.2`](https://github.com/virtualryder/Housing_eligibility_agent/releases/tag/v0.9.2)**
+> validated release tag [`v0.9.4`](https://github.com/virtualryder/Housing_eligibility_agent/releases/tag/v0.9.4)**
 > (`cdk/` — includes the AgentCore Gateway/Cedar attachment as IaC), per
 > [`DEPLOYMENT-GUIDE.md`](DEPLOYMENT-GUIDE.md) and [`VALIDATED_RELEASE.md`](VALIDATED_RELEASE.md).
 > The shell engine (`lib/engine/`) is **legacy/internal reference only** — do not deploy it for a
@@ -220,7 +220,7 @@ Full step-by-step guide: [`DEPLOYMENT-GUIDE.md`](DEPLOYMENT-GUIDE.md) (prerequis
 environment/switch matrix, secrets, the operator case flow, troubleshooting). The short version:
 
 ```bash
-git checkout v0.9.3                      # deploy a VALIDATED RELEASE TAG, never main
+git checkout v0.9.4                      # deploy a VALIDATED RELEASE TAG, never main
 cd cdk && pip install -r requirements.txt
 cdk deploy --all -c env=pilot -c retention_profile=pilot -c kms=customer-managed \
   -c network_mode=private -c identity_mode=pilot -c tenant=<pha-id>

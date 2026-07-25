@@ -42,7 +42,7 @@ Identity: the pool ships with ZERO users. Federate your IdP per `docs/IdP-Federa
 
 ## 3. Deploy
 ```bash
-git checkout v0.9.3        # always deploy a validated release tag, never main
+git checkout v0.9.4        # always deploy a validated release tag, never main
 cd cdk && pip install -r requirements.txt
 cdk deploy --all -c env=pilot -c retention_profile=pilot -c kms=customer-managed \
   -c network_mode=private -c identity_mode=pilot -c tenant=<pha-id>

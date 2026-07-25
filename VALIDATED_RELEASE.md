@@ -8,8 +8,8 @@ release's clean-account validation run and MUST NOT be asserted before capture.*
 
 | Field | Value |
 |---|---|
-| Tag | `v0.9.2` (immutable; 2026-07-24) — supersedes `v0.9.1-pilot-rc2` |
-| Commit SHA | the commit carrying tag `v0.9.2` (`git rev-list -n1 v0.9.2`) |
+| Tag | `v0.9.4` (immutable; 2026-07-24) — supersedes `v0.9.3`/`v0.9.2` |
+| Commit SHA | the commit carrying tag `v0.9.4` (`git rev-list -n1 v0.9.4`) |
 | Date | 2026-07-24 |
 | Deployment path validated | CDK (`cdk/`) — the customer path, including the AgentCore Gateway/Cedar attachment as IaC AND the **full Gate-B hardening posture** (`network_mode=private`, `kms=customer-managed`, `identity_mode=pilot`, pinned `tenant`). (The legacy shell engine is an internal reference and is NOT the release-validated path.) |
 
