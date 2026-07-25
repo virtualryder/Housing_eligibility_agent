@@ -21,8 +21,10 @@ def main():
         out["deployment_status"] = "PASS" if not statuses else "FAIL"
         print(json.dumps(out)); sys.exit(0 if not statuses else 1)
     out["stacks"] = "COMPLETE" if statuses and all(s.endswith("_COMPLETE") for s in statuses) else f"FAIL:{statuses}"
-    rc, _ = aws("secretsmanager", "describe-secret", "--secret-id", f"{p}/provenance-signing", "--region", a.region)
-    out["secrets"] = "PRESENT" if rc == 0 else "FAIL"
+    # GA-2: TWO domain-scoped signing secrets (deid + HUD) must both exist
+    rc1, _ = aws("secretsmanager", "describe-secret", "--secret-id", f"{p}/provenance-signing-deid", "--region", a.region)
+    rc2, _ = aws("secretsmanager", "describe-secret", "--secret-id", f"{p}/provenance-signing-hud", "--region", a.region)
+    out["secrets"] = "PRESENT" if rc1 == 0 and rc2 == 0 else "FAIL"
     # masking control probe: mask -> genuine ref ok; forged ref denied
     payload = json.dumps({"case": "Probe Person, SSN 123-45-6789, household of 4, income 40000, county entityid 0603799999"})
     open("/tmp/_m.json", "w").write(payload)
@@ -39,9 +41,18 @@ def main():
                     "--cli-binary-format", "raw-in-base64-out", "--payload", "file:///tmp/_g.json", "/tmp/_go.json")
         g = json.load(open("/tmp/_go.json")) if rc == 0 else {}
         out[name] = "PASS" if g.get("ok") is want else "FAIL"
-    # workflow fail-closed probe (no HUD token -> ManualReview) or happy path if token present
-    open("/tmp/_w.json", "w").write(json.dumps({"case_id": f"VAL-{int(time.time())}", "requester": "validator",
-        "application": "Household of 4. Annual household income: 40000. County entityid 0603799999."}))
+    # workflow fail-closed probe (no HUD token -> ManualReview) or happy path if token present.
+    # R3-2 pass-by-reference: raw content enters ONLY via ingest-case; the execution starts with
+    # {case_id, requester, case_ref} — inline application text is no longer a valid input.
+    open("/tmp/_i.json", "w").write(json.dumps(
+        {"application": "Household of 4. Annual household income: 40000. County entityid 0603799999.",
+         "case_id": f"VAL-{int(time.time())}"}))
+    rc, _ = aws("lambda", "invoke", "--function-name", f"{p}-ingest-case", "--region", a.region,
+                "--cli-binary-format", "raw-in-base64-out", "--payload", "file:///tmp/_i.json", "/tmp/_io.json")
+    ing = json.load(open("/tmp/_io.json")) if rc == 0 else {}
+    out["ingest_pass_by_reference"] = "PASS" if ing.get("ingested") and str(ing.get("case_ref", "")).startswith("case-") else "FAIL"
+    open("/tmp/_w.json", "w").write(json.dumps({"case_id": ing.get("case_id", "VAL"), "requester": "validator",
+                                                "case_ref": ing.get("case_ref", "")}))
     rc, arn = aws("stepfunctions", "start-execution", "--region", a.region,
                   "--state-machine-arn", f"arn:aws:states:{a.region}:{{ACCT}}:stateMachine:{p}-determination-workflow"
                   .replace("{ACCT}", aws("sts", "get-caller-identity", "--query", "Account", "--output", "text")[1]),
@@ -64,6 +75,7 @@ def main():
                                              for k, v in out.items()
                                              if k in ("stacks", "secrets", "masking_control",
                                                       "guard_genuine", "forged_ref_denied",
+                                                      "ingest_pass_by_reference",
                                                       "workflow_fail_closed")) else "FAIL"
     print(json.dumps(out, indent=1))
     sys.exit(0 if out["deployment_status"] == "PASS" else 1)

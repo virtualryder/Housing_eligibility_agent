@@ -10,7 +10,8 @@
   Cognito, Secrets Manager, SNS, CloudWatch, Comprehend, Bedrock (model access enabled for the
   configured Claude model), Bedrock AgentCore (for the gateway attachment).
 - **Region:** any Region with Bedrock AgentCore + the chosen model (validated in us-east-1).
-- **Quotas:** default quotas suffice for a pilot (≤ 12 Lambdas, 1 state machine, 2 tables, 1 bucket).
+- **Quotas:** default quotas suffice for a pilot (≤ 13 Lambdas, 1 state machine, 4 DynamoDB tables
+  — audit ledger, sanitized artifacts, case store, pending approvals — 1 bucket).
 - **Tooling:** Node 18+, `npm i -g aws-cdk`, Python 3.12, `pip install -r cdk/requirements.txt`.
 - **Deployment role:** CloudFormation service-role pattern; least-privilege statement list in
   `cdk/README.md` (or use CDK bootstrap's deploy role). `cdk bootstrap aws://<acct>/<region>` once.
@@ -41,11 +42,14 @@ Identity: the pool ships with ZERO users. Federate your IdP per `docs/IdP-Federa
 
 ## 3. Deploy
 ```bash
+git checkout v0.9.3        # always deploy a validated release tag, never main
 cd cdk && pip install -r requirements.txt
 cdk deploy --all -c env=pilot -c retention_profile=pilot -c kms=customer-managed \
   -c network_mode=private -c identity_mode=pilot -c tenant=<pha-id>
-# then attach the AgentCore gateway + Cedar policies (GatewayStack; see cdk/README.md §AgentCore)
 ```
+`--all` includes EVERYTHING — the AgentCore Gateway/Cedar attachment (`hou-<env>-gateway`) deploys
+as IaC with the rest; there are no post-deployment shell steps (see the stack table in
+`cdk/README.md`).
 Ordering notes (from the live Gate-B run): the **observability stack imports the workflow stack's
 export — deploy it after workflow** (CDK orders this automatically; if driving CloudFormation
 directly, sequence it yourself). The Network Firewall adds ~8–10 min to network-stack create, and
@@ -57,25 +61,67 @@ python scripts/validate_deployment.py --env pilot --region <region>
 ```
 Emits the machine-readable verdict, e.g.:
 ```json
-{"deployment_status":"PASS","release":"<tag>","stacks":"CREATE_COMPLETE","secrets":"PRESENT",
- "masking_control":"PASS","forged_ref_denied":"PASS","workflow_fail_closed":"PASS",
- "hud_lookup":"PASS|NOT-CONFIGURED","audit_chain":"INTACT"}
+{"deployment_status":"PASS","release":"<tag>","stacks":"COMPLETE","secrets":"PRESENT",
+ "masking_control":"PASS","guard_genuine":"PASS","forged_ref_denied":"PASS",
+ "ingest_pass_by_reference":"PASS","workflow_fail_closed":"PASS",
+ "hud_lookup":"CONFIGURED|NOT-CONFIGURED (fail-closed to ManualReview)"}
 ```
-Any FAIL blocks the pilot. Attach the JSON to the deployment record.
+Any FAIL blocks the pilot. Attach the JSON to the deployment record. For INDEPENDENT verification,
+run the GitHub-OIDC release-validation workflow (`.github/workflows/release-validation.yml`) instead
+of trusting a local run.
 
-## 5. Operate
+## 5. Run a case (operator flow — pass-by-reference)
+
+Raw applicant content never enters Step Functions state: it goes in ONCE through the ingest Lambda,
+and only an opaque `case_ref` starts the workflow.
+
+```bash
+P=hou-pilot; R=us-east-1
+# 1. INGEST the application (the only door for raw content; response is content-free)
+aws lambda invoke --function-name $P-ingest-case --region $R \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"case_id":"HOU-2026-0001","application":"<raw application text>"}' /tmp/ing.json
+CASE_REF=$(python -c "import json;print(json.load(open('/tmp/ing.json'))['case_ref'])")
+
+# 2. START the governed workflow with the REF (never the text)
+aws stepfunctions start-execution --region $R \
+  --state-machine-arn arn:aws:states:$R:<acct>:stateMachine:$P-determination-workflow \
+  --name hou-2026-0001 \
+  --input "{\"case_id\":\"HOU-2026-0001\",\"requester\":\"<intake-operator>\",\"case_ref\":\"$CASE_REF\"}"
+
+# 3. The pipeline pauses at HumanSignoff (~1 min). The housing specialist reviews:
+aws dynamodb get-item --table-name $P-pending-approvals --region $R \
+  --key '{"case_id":{"S":"HOU-2026-0001"}}'          # -> task_token + content_hash
+#    - the DRAFT NOTICE is in the case store under the draft step's notice_ref (execution history
+#      shows the ref; fetch: aws dynamodb get-item --table-name $P-case-store --key '{"case_ref":{"S":"<notice_ref>"}}')
+#    - the assessment (non-PII) is in the execution history AssessRules output
+
+# 4. A DIFFERENT person than the requester APPROVES (content_hash binds the approval to what they saw)
+aws stepfunctions send-task-success --region $R --task-token "<task_token>" \
+  --task-output '{"approved":true,"decision":"APPROVE","approver":"<specialist>","content_hash":"<content_hash>","case_id":"HOU-2026-0001"}'
+
+# 5. Finalize runs EXACTLY ONCE; verify the committed record + marker:
+aws dynamodb get-item --table-name $P-audit-ledger --region $R \
+  --key '{"audit_id":{"S":"FINAL#HOU-2026-0001"}}'
+```
+
+A rejected case: send `"approved":false,"decision":"REJECT"` — nothing commits. A case the guards
+refuse (unverifiable HUD data, unproven masking) never reaches the gate: it ends in `ManualReview`
+for ordinary human processing. Synthetic test cases with expected results: `data/synthetic/`.
+
+## 6. Operate
 Subscribe ops to the `hou-<env>-ops-alarms` SNS topic; dashboard `hou-<env>-operations`. Runbooks:
 `docs/THREAT-MODEL.md` (security events), `docs/DATA-SOURCE-POLICY.md` (HUD outage → NEEDS_REVIEW),
 `docs/RETENTION-PROFILES.md` (retention/break-glass).
 
-## 6. Upgrade / rollback / uninstall
+## 7. Upgrade / rollback / uninstall
 - **Upgrade:** deploy a NEW tagged release via `cdk deploy` (change-sets are reviewable); never patch in place.
 - **Rollback:** redeploy the previous tag (stateless compute; data stacks are additive).
 - **Uninstall:** `cdk destroy --all` then delete the RETAIN'd audit table + WORM vault **only per the
   customer's records-disposition procedure**, then run the residual-resource check:
   `python scripts/validate_deployment.py --env pilot --expect-absent`.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 | Symptom | Cause / fix |
 |---|---|
 | Execution → ManualReview at GuardAuthoritative | HUD token missing/invalid (by design, fail-closed) — fill the secret |

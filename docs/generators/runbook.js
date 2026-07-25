@@ -4,12 +4,33 @@ const { H1, H2, H3, P, bold, code, bullet, num, codeBlock, callout, table, space
 const cover = coverAndToc(
   ["Housing Eligibility Agent", "on Amazon Bedrock AgentCore"],
   "Solution Architect Deployment Runbook",
-  "Step-by-step deployment of the governed Housing Choice Voucher (Section 8) / public-housing eligibility accelerator into an AWS account — identity, governance spine, tools, the live HUD income-limit integration, and the Runtime agent — from one manifest. Region: us-east-1. Every command in this runbook was run end to end to stand the agent up and prove 30/30 in ENFORCE. Accelerator reference; not production-certified. Version 1.2 · 2026.",
-  ["1. Overview", "2. Prerequisites", "3. What gets deployed", "4. Deployment procedure", "5. Configuration reference", "6. Validation checklist", "7. Teardown", "8. Windows / Git-Bash operational notes"]
+  "Deployment of the governed HCV intake and preliminary income-screening accelerator. SECTION 0 IS THE SUPPORTED CUSTOMER PATH (AWS CDK at a validated release tag - live-validated, incl. the full Gate-B hardening posture). Sections 1-8 document the legacy shell engine, retained as internal reference only. Region: us-east-1. Accelerator reference; not production-certified. Version 2.0 · 2026-07.",
+  ["0. THE SUPPORTED PATH - CDK at a validated release", "1. Overview (legacy shell reference)", "2. Prerequisites", "3. What gets deployed", "4. Deployment procedure", "5. Configuration reference", "6. Validation checklist", "7. Teardown", "8. Windows / Git-Bash operational notes"]
 );
 
 const body = [
-  H1("1. Overview"),
+  H1("0. THE SUPPORTED PATH — CDK at a validated release"),
+  callout("Read this first", [["Customer deployments use AWS CDK at a validated release tag (v0.9.3 or later) — never main, never the shell engine. The CDK path was validated live three times, including the full Gate-B hardening posture (private networking with a HUD-only egress firewall allowlist, customer-managed KMS, MFA-required identity, pinned tenancy) and a strict PII canary (zero applicant content in any telemetry, including Step Functions execution history). Everything in this section is a summary; DEPLOYMENT-GUIDE.md in the repository root is the authoritative step-by-step guide."]], G.colors.TEAL),
+  H2("0.1 Deploy"),
+  codeBlock([
+    "git checkout v0.9.3        # a validated release tag, never main",
+    "cd cdk && pip install -r requirements.txt",
+    "cdk bootstrap aws://<acct>/us-east-1   # once per account",
+    "cdk deploy --all -c env=pilot -c retention_profile=pilot -c kms=customer-managed \\",
+    "  -c network_mode=private -c identity_mode=pilot -c tenant=<pha-id>",
+  ]),
+  P(["Seven stacks deploy, including the AgentCore Gateway + Cedar policies AS infrastructure-as-code (no post-deploy shell steps). Then stage the HUD USER API token into the created secret ", code("hou-pilot/hud-api-token"), " (DEPLOYMENT-GUIDE §2) and validate:"]),
+  codeBlock(["python scripts/validate_deployment.py --env pilot   # machine PASS/FAIL - any FAIL blocks use"]),
+  H2("0.2 Run a case (pass-by-reference)"),
+  P(["Raw applicant content never enters Step Functions state. The operator flow is: ", bold("(1) ingest"), " the application via the ", code("hou-pilot-ingest-case"), " Lambda (returns an opaque ", code("case_ref"), ", never content); ", bold("(2) start"), " the workflow with ", code("{case_id, requester, case_ref}"), "; ", bold("(3) review"), " — the pipeline pauses at the human gate, the pending approval (task token + content hash) is in ", code("hou-pilot-pending-approvals"), ", the draft notice is in the case store under its ", code("notice_ref"), "; ", bold("(4) approve"), " — a DIFFERENT person sends task-success with the content hash; ", bold("(5) verify"), " the exactly-once ", code("FINAL#<case>"), " marker in the audit ledger. Exact commands: DEPLOYMENT-GUIDE §5."]),
+  H2("0.3 Operate, verify independently, tear down"),
+  bullet([bold("Operations "), "— subscribe to the ", code("hou-pilot-ops-alarms"), " SNS topic; dashboard ", code("hou-pilot-operations"), "; guard failures (forged/tampered evidence) page as security signals. Key rotation: docs/KEY-MANAGEMENT.md."]),
+  bullet([bold("Independent verification "), "— the GitHub-OIDC release-validation workflow (.github/workflows/release-validation.yml) deploys the tag into a clean account, validates incl. the strict PII canary, tears down, and publishes the report under a run ID."]),
+  bullet([bold("Teardown "), "— ", code("cdk destroy --all"), "; the audit ledger + WORM vault are RETAIN'd by design (records disposition is a human decision); VPC-attached Lambda stacks take ~15-20 min to delete (ENI release)."]),
+  spacer(),
+
+  H1("1. Overview (legacy shell reference)"),
+  callout("Legacy path", [["Everything from here on documents the SHELL ENGINE - an internal reference implementation. Do not use it for customer deployments; it exists for engineering archaeology and portfolio parity."]], G.colors.AMBER, "FBF3E7"),
   P("This runbook stands up the governed Housing Choice Voucher / public-housing eligibility agent in an AWS account. The agent is defined by a single manifest and produced from the reusable governed-hero-agent template; the deployment has three lifecycles that are managed independently:"),
   bullet([bold("Identity stack "), "— a stable Amazon Cognito user pool, app client, and test users. Long-lived; created (or reused) by the spine deploy and not torn down with it."]),
   bullet([bold("Governance spine "), "— the Cedar policy engine, AgentCore Gateway, tool Lambdas, Bedrock Guardrail, WORM audit stores, and the Step Functions human sign-off gate. Reproducible; stood up and torn down as a unit."]),

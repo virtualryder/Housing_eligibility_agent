@@ -214,40 +214,41 @@ The higher-risk the action, the stronger the governance. Beyond intake/screening
   suspected fraud. Forbidden by Cedar `no_self_fraud_referral` — the same deny-by-default pattern as
   `no_self_commit`, showing the model scales to every new high-risk action.
 
-## Deploy / prove / run / tear down
+## Deploy / validate / run / tear down (the supported CDK path)
 
-Requirements: AWS CLI v2 (admin, us-east-1), Python 3.12 + `pyyaml`, Bedrock model access, Bash
-(Git-Bash on Windows), and a free HUD USER API token. One agent = one manifest
-(`agents/housing-assistance/manifest.yaml`) + domain tool bodies + Cedar policies; the engine, control
-library, and runtime are reused.
+Full step-by-step guide: [`DEPLOYMENT-GUIDE.md`](DEPLOYMENT-GUIDE.md) (prerequisites, the
+environment/switch matrix, secrets, the operator case flow, troubleshooting). The short version:
+
+```bash
+git checkout v0.9.3                      # deploy a VALIDATED RELEASE TAG, never main
+cd cdk && pip install -r requirements.txt
+cdk deploy --all -c env=pilot -c retention_profile=pilot -c kms=customer-managed \
+  -c network_mode=private -c identity_mode=pilot -c tenant=<pha-id>
+# stage the HUD token into the created secret (see DEPLOYMENT-GUIDE §2), then:
+python scripts/validate_deployment.py --env pilot   # machine PASS/FAIL verdict — any FAIL blocks use
+# run a case: ingest (raw text -> opaque ref) -> start execution with the ref -> specialist approves
+#   (DEPLOYMENT-GUIDE §5 has the exact five commands)
+cdk destroy --all -c env=pilot                      # teardown; RETAIN'd evidence per records policy
+```
+
+Independent verification without trusting anyone's laptop: the **GitHub-OIDC release-validation
+workflow** ([`.github/workflows/release-validation.yml`](.github/workflows/release-validation.yml))
+deploys the tag into a clean account, validates (including the strict PII canary), tears down, and
+publishes the report under a run ID.
+
+<details>
+<summary><b>Legacy shell engine</b> (internal reference only — NOT for customer deployments)</summary>
 
 ```bash
 bash lib/engine/deploy.sh  agents/housing-assistance    # spine: engine -> gateway -> targets -> policies -> ENFORCE
-# inject the HUD token (kept out of the repo) so the live income-limit lookup works:
-aws lambda update-function-configuration --function-name hou-lookup-income-limit \
-  --environment "Variables={HUD_API_TOKEN=<your-token>}" --region us-east-1
-bash lib/engine/demo.sh    agents/housing-assistance    # governance proof (Cedar ENFORCE)
-bash lib/engine/redteam.sh agents/housing-assistance   # adversarial proof: governance holds under attack
-# Runtime (from a fresh venv):
-bash lib/runtime/setup_venv.sh
-bash lib/runtime/_obs_setup.sh  agents/housing-assistance
-bash lib/runtime/_configure.sh  agents/housing-assistance
-bash lib/runtime/_launch.sh     agents/housing-assistance
-bash lib/runtime/_invoke.sh     agents/housing-assistance housing_specialist   # or: bash invoke_demo.sh (with sample data)
-# Optional depth add-on — the governed OAuth connector (real outbound auth via AgentCore Identity, no stored secret):
-bash lib/connector/deploy_connector.sh agents/housing-assistance   # mock OAuth SoR (MOCK-EIV-PIC) + Identity provider + verify_source
-bash lib/connector/prove_connector.sh  agents/housing-assistance   # proves OAuth + RS256/JWKS signature check + no secret + deny-by-default
-bash lib/engine/destroy.sh agents/housing-assistance    # zero-residual teardown (identity preserved)
+bash lib/engine/demo.sh    agents/housing-assistance    # 30-check governance proof (Cedar ENFORCE)
+bash lib/engine/redteam.sh agents/housing-assistance    # adversarial proof
+bash lib/engine/destroy.sh agents/housing-assistance    # teardown
 ```
-
-> **Windows / Git-Bash note.** Deploy from a **path without spaces** (Git-Bash quoting breaks otherwise),
-> and if you launch the runtime detached use the `cmd.exe /c '"…bash.exe" -l runner.sh > log 2>&1'`
-> pattern. Before tearing down, **stop any orphaned sign-off Step Functions executions** still `RUNNING`
-> (`aws stepfunctions list-executions --status-filter RUNNING` → `stop-execution`) so the state machine
-> can delete cleanly. See `docs/` for the full SA runbook.
-
-Test-user passwords are env-driven (`PV_REVIEWER_PW` / `PV_APPROVER_PW` / `PV_OUTSIDER_PW`) with
-placeholder defaults (`ChangeMe-*1!`) — rotate before shared use. Region/account resolve dynamically.
+Runtime/connector add-ons: `lib/runtime/`, `lib/connector/` scripts. Windows/Git-Bash notes and the
+orphaned-execution teardown caveat are in the SA runbook (`docs/`). Shell-path test-user passwords
+are env-driven with `ChangeMe-*` placeholders — sandbox only (the CDK path ships ZERO users).
+</details>
 
 ## Layout
 
