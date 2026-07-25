@@ -4,6 +4,13 @@
 release with captured evidence — never "whatever is on main." Fields marked ☐ are captured during the
 release's clean-account validation run and MUST NOT be asserted before capture.*
 
+> **Evidence provenance:** every capture below was produced BY THIS PROJECT (author-run deployments,
+> author-run sweeps), recorded with dates, commit SHAs, raw values, and teardown verification. None
+> of it is independent certification — no third-party penetration test has been performed, and no
+> deployment has yet been reproduced by someone other than the author. The path to independent
+> reproduction is the GitHub-OIDC release-validation workflow
+> (`.github/workflows/release-validation.yml`), which publishes its verdict under a run ID.
+
 ## Release
 
 | Field | Value |

@@ -2,6 +2,9 @@
 
 [![CI](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/virtualryder/Housing_eligibility_agent/actions/workflows/ci.yml)
 
+**New here? → [`START-HERE.md`](START-HERE.md)** — one page: what this is, evidence provenance,
+reading order by role (SA / CISO / CIO / auditor / GTM), and the repeatable pilot offer.
+
 > **SUPPORTED DEPLOYMENT PATH — read this first.** The ONE supported path is **AWS CDK at the
 > validated release tag [`v0.9.4`](https://github.com/virtualryder/Housing_eligibility_agent/releases/tag/v0.9.4)**
 > (`cdk/` — includes the AgentCore Gateway/Cedar attachment as IaC), per
@@ -180,15 +183,15 @@ SSM and validates the housing specialist's Cognito JWT.
 (`https://www.huduser.gov/hudapi/public/il/data/{entityid}`) with the county FIPS `entityid` and returns
 the 30% / 50% / 80% AMI limits for the household size, plus `median_income`, `county_name`, and a
 provenance object stamped into the WORM audit. HUD requires a free Bearer token (register at
-huduser.gov); it is supplied at runtime via the `HUD_API_TOKEN` environment variable / Secrets Manager
-and is **never committed to this repo**. The call is a governed Gateway tool — Cedar-authorized and
-audited like every other tool — and it fails soft (`found: false`) so the workflow degrades gracefully
-if the token is absent or the county is unknown.
+huduser.gov); on the supported CDK path it lives ONLY in the deployment's Secrets Manager secret and
+is **never committed to this repo**. The call is Cedar-authorized and audited like every other tool,
+and a missing/invalid token FAILS CLOSED: the lookup returns `found: false` and the workflow routes
+to `ManualReview` — never a determination on unverifiable data.
 
 ```bash
-# after deploy, inject the token into the lookup Lambda (kept out of the repo):
-aws lambda update-function-configuration --function-name hou-lookup-income-limit \
-  --environment "Variables={HUD_API_TOKEN=<your-token>}" --region us-east-1
+# after deploy, stage the token into the created secret (DEPLOYMENT-GUIDE §2):
+aws secretsmanager put-secret-value --secret-id hou-<env>/hud-api-token \
+  --secret-string "<your-huduser.gov-token>" --region us-east-1
 ```
 
 ## Tests — proven live in ENFORCE
