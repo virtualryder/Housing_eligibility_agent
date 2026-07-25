@@ -1,6 +1,6 @@
 # CDK — THE supported customer deployment path
 
-*Reviewable, parameterized IaC. Deploy the validated release tag (`v0.9.2`), never `main`, per
+*Reviewable, parameterized IaC. Deploy the validated release tag (`v0.9.4`), never `main`, per
 [`../DEPLOYMENT-GUIDE.md`](../DEPLOYMENT-GUIDE.md). The shell engine (`lib/engine/`) is
 **legacy/internal reference only** and must not be used for customer deployments.*
 
@@ -19,7 +19,7 @@
 ## Use
 
 ```bash
-git checkout v0.9.2            # deploy the validated release, never main
+git checkout v0.9.4            # deploy the validated release, never main
 cd cdk && python -m pip install -r requirements.txt
 cdk synth  -c env=dev  -c retention_profile=sandbox-demo            # review the plan
 # full Gate-B posture (validated live 2026-07-24 — evidence/GATE-B-VALIDATION.md):
