@@ -1,8 +1,44 @@
 # Deployment Guide — CDK (the only supported customer path)
 
+> **Re-validated live 2026-07-28 (`hou-val2`, us-east-1, all Gate-B switches).** 7/7 stacks in 530s;
+> `validate_deployment.py` → **PASS** (masking control, genuine guard, forged-ref denied, ingest
+> pass-by-reference, workflow fail-closed, HUD lookup CONFIGURED); strict PII canary **PASS, 0 leaks**;
+> MFA ON / 0 users / admin-create-only; Network Firewall egress allowlist = `.huduser.gov`.
+> See [`evidence/`](evidence/). This guide was walked end to end as an SA would; the fixes below came
+> out of that walk.
+
+
 *GA-7 (Review-2). Deploys the governed HCV preliminary income-screening assistant. Estimated time:
 30–45 min. Estimated pilot cost: < $5/day idle + ~$0.09 per governed transaction (see
 `docs/Cost-and-Latency-One-Pager.md`).*
+
+> ## ⛔ Reusing an environment name? Delete its leftover log groups FIRST
+>
+> `cdk destroy` does **not** delete the `/aws/lambda/hou-<env>-*` log groups. When you later redeploy
+> the **same `-c env=` value**, the compute stack (with `kms=customer-managed`) creates those log
+> groups *explicitly*, CloudFormation's existence check sees the collision, and the deploy dies at the
+> compute stack with a message that **never names the log groups**:
+>
+> ```
+> Early validation failed for change set cdk-deploy-change-set:
+>   hou-<env>-compute (AWS::CloudFormation::Stack)
+>   The following hook(s)/validation failed: [AWS::EarlyValidation::ResourceExistenceCheck]
+> ```
+>
+> ```bash
+> E=val2   # your -c env= value
+> aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/hou-$E" \
+>   --query 'logGroups[].logGroupName' --output text | tr '\t' '\n' \
+>   | xargs -r -n1 -I{} aws logs delete-log-group --log-group-name {}
+> ```
+>
+> Also clear a stack left in `REVIEW_IN_PROGRESS` by the failed attempt:
+> `aws cloudformation delete-stack --stack-name hou-$E-compute`.
+>
+> **A first-time deploy into a clean account is unaffected.** This bites on re-deploys — which is
+> exactly what an evaluating SA does. Diagnosed on a live redeploy 2026-07-28 (`hou-val2`); 11
+> leftover log groups blocked it, and deleting them let all 7 stacks deploy in 530s.
+> The teardown section below now removes them so the next deploy is clean.
 
 ## 1. Prerequisites
 - **Account/org:** a dedicated sandbox or pilot account (one PHA per account — no multi-tenancy);
@@ -12,9 +48,9 @@
 - **Region:** any Region with Bedrock AgentCore + the chosen model (validated in us-east-1).
 - **Quotas:** default quotas suffice for a pilot (≤ 13 Lambdas, 1 state machine, 4 DynamoDB tables
   — audit ledger, sanitized artifacts, case store, pending approvals — 1 bucket).
-- **Tooling:** Node 18+, `npm i -g aws-cdk`, Python 3.12, `pip install -r cdk/requirements.txt`.
+- **Tooling:** Node 18+, `npx --yes aws-cdk@2` (or `npm i -g aws-cdk`; without `--yes` npx stops at an interactive install prompt and hangs silently), Python 3.12, `pip install -r cdk/requirements.txt`.
 - **Deployment role:** CloudFormation service-role pattern; least-privilege statement list in
-  `cdk/README.md` (or use CDK bootstrap's deploy role). `cdk bootstrap aws://<acct>/<region>` once.
+  `cdk/README.md` (or use CDK bootstrap's deploy role). `npx --yes aws-cdk@2 bootstrap aws://<acct>/<region>` once.
 
 ## 2. Configure (environment matrix)
 | Context | dev | pilot | production-reference |
@@ -42,9 +78,9 @@ Identity: the pool ships with ZERO users. Federate your IdP per `docs/IdP-Federa
 
 ## 3. Deploy
 ```bash
-git checkout v0.9.4        # always deploy a validated release tag, never main
+git checkout v0.9.5        # always deploy a validated release tag, never main
 cd cdk && pip install -r requirements.txt
-cdk deploy --all -c env=pilot -c retention_profile=pilot -c kms=customer-managed \
+npx --yes aws-cdk@2 deploy --all --require-approval never -c env=pilot -c retention_profile=pilot -c kms=customer-managed \
   -c network_mode=private -c identity_mode=pilot -c tenant=<pha-id>
 ```
 `--all` includes EVERYTHING — the AgentCore Gateway/Cedar attachment (`hou-<env>-gateway`) deploys
@@ -117,9 +153,24 @@ Subscribe ops to the `hou-<env>-ops-alarms` SNS topic; dashboard `hou-<env>-oper
 ## 7. Upgrade / rollback / uninstall
 - **Upgrade:** deploy a NEW tagged release via `cdk deploy` (change-sets are reviewable); never patch in place.
 - **Rollback:** redeploy the previous tag (stateless compute; data stacks are additive).
-- **Uninstall:** `cdk destroy --all` then delete the RETAIN'd audit table + WORM vault **only per the
-  customer's records-disposition procedure**, then run the residual-resource check:
+- **Uninstall:** stop any executions parked at the human sign-off gate first (a RUNNING execution
+  blocks state-machine deletion and the destroy stalls), then
+  `npx --yes aws-cdk@2 destroy --all --force`, then delete the RETAIN'd audit table + WORM vault
+  **only per the customer's records-disposition procedure**, then run the residual-resource check:
   `python scripts/validate_deployment.py --env pilot --expect-absent`.
+
+  **Also delete the log groups** — `destroy` leaves them, and they will block the *next* deploy that
+  reuses the same `-c env=` value (see the warning at the top of this guide):
+
+  ```bash
+  E=pilot
+  aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/hou-$E" \
+    --query 'logGroups[].logGroupName' --output text | tr '\t' '\n' \
+    | xargs -r -n1 -I{} aws logs delete-log-group --log-group-name {}
+  ```
+
+  Then sweep every resource type, not just stacks — an empty `describe-stacks` is **not** proof of
+  zero residual (verified `hou-val2`, 2026-07-28).
 
 ## 8. Troubleshooting
 | Symptom | Cause / fix |
