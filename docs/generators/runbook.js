@@ -10,10 +10,10 @@ const cover = coverAndToc(
 
 const body = [
   H1("0. THE SUPPORTED PATH — CDK at a validated release"),
-  callout("Read this first", [["Customer deployments use AWS CDK at a validated release tag (v0.9.5 or later) — never main, never the shell engine. The CDK path was validated live three times, including the full Gate-B hardening posture (private networking with a HUD-only egress firewall allowlist, customer-managed KMS, MFA-required identity, pinned tenancy) and a strict PII canary (zero applicant content in any telemetry, including Step Functions execution history). Everything in this section is a summary; DEPLOYMENT-GUIDE.md in the repository root is the authoritative step-by-step guide."]], G.colors.TEAL),
+  callout("Read this first", [["Customer deployments use AWS CDK at a validated release tag (v0.9.6 or later) — never main, never the shell engine. The CDK path was validated live three times, including the full Gate-B hardening posture (private networking with a HUD-only egress firewall allowlist, customer-managed KMS, MFA-required identity, pinned tenancy) and a strict PII canary (zero applicant content in any telemetry, including Step Functions execution history). Everything in this section is a summary; DEPLOYMENT-GUIDE.md in the repository root is the authoritative step-by-step guide."]], G.colors.TEAL),
   H2("0.1 Deploy"),
   codeBlock([
-    "git checkout v0.9.5        # a validated release tag, never main",
+    "git checkout v0.9.6        # a validated release tag, never main",
     "cd cdk && pip install -r requirements.txt",
     "npx --yes aws-cdk@2 bootstrap aws://<acct>/us-east-1   # once per account (--yes: bare npx hangs on an install prompt)",
     "npx --yes aws-cdk@2 deploy --all --require-approval never -c env=pilot -c retention_profile=pilot -c kms=customer-managed \\",

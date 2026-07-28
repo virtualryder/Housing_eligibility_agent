@@ -1,7 +1,7 @@
 # START HERE — Governed HCV Intake & Preliminary Income-Screening Accelerator
 
 *One page. What this is, what's proven, how to evaluate it, and what a pilot engagement looks like.
-Current validated release: **[`v0.9.5`](https://github.com/virtualryder/Housing_eligibility_agent/releases/tag/v0.9.5)**
+Current validated release: **[`v0.9.6`](https://github.com/virtualryder/Housing_eligibility_agent/releases/tag/v0.9.6)**
 (deploy tags, never `main`). Supported deployment path: **AWS CDK** (`cdk/`); the shell engine is
 legacy/internal.*
 
