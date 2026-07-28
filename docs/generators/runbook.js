@@ -15,8 +15,8 @@ const body = [
   codeBlock([
     "git checkout v0.9.5        # a validated release tag, never main",
     "cd cdk && pip install -r requirements.txt",
-    "cdk bootstrap aws://<acct>/us-east-1   # once per account",
-    "cdk deploy --all -c env=pilot -c retention_profile=pilot -c kms=customer-managed \\",
+    "npx --yes aws-cdk@2 bootstrap aws://<acct>/us-east-1   # once per account (--yes: bare npx hangs on an install prompt)",
+    "npx --yes aws-cdk@2 deploy --all --require-approval never -c env=pilot -c retention_profile=pilot -c kms=customer-managed \\",
     "  -c network_mode=private -c identity_mode=pilot -c tenant=<pha-id>",
   ]),
   P(["Seven stacks deploy, including the AgentCore Gateway + Cedar policies AS infrastructure-as-code (no post-deploy shell steps). Then stage the HUD USER API token into the created secret ", code("hou-pilot/hud-api-token"), " (DEPLOYMENT-GUIDE §2) and validate:"]),
@@ -26,7 +26,7 @@ const body = [
   H2("0.3 Operate, verify independently, tear down"),
   bullet([bold("Operations "), "— subscribe to the ", code("hou-pilot-ops-alarms"), " SNS topic; dashboard ", code("hou-pilot-operations"), "; guard failures (forged/tampered evidence) page as security signals. Key rotation: docs/KEY-MANAGEMENT.md."]),
   bullet([bold("Independent verification "), "— the GitHub-OIDC release-validation workflow (.github/workflows/release-validation.yml) deploys the tag into a clean account, validates incl. the strict PII canary, tears down, and publishes the report under a run ID."]),
-  bullet([bold("Teardown "), "— ", code("cdk destroy --all"), "; the audit ledger + WORM vault are RETAIN'd by design (records disposition is a human decision); VPC-attached Lambda stacks take ~15-20 min to delete (ENI release)."]),
+  bullet([bold("Teardown "), "— ", code("npx --yes aws-cdk@2 destroy --all --force"), "; the audit ledger + WORM vault are RETAIN'd by design (records disposition is a human decision); VPC-attached Lambda stacks take ~15-20 min to delete (ENI release)."]),
   spacer(),
 
   H1("1. Overview (legacy shell reference)"),
