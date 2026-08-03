@@ -18,7 +18,7 @@ release's clean-account validation run and MUST NOT be asserted before capture.*
 | Tag | `v0.9.6` (immutable; 2026-07-24) — supersedes `v0.9.3`/`v0.9.2`. Single source of truth: the repo-root `RELEASE` file, enforced by `tests/test_release_consistency.py` (tag drift across docs fails CI) |
 | Commit SHA | the commit carrying tag `v0.9.6` (`git rev-list -n1 v0.9.6`) |
 | Test count at tag | **161 tests** at the moment `v0.9.6` was cut (134 offline + 24 CDK assertions + 3 CI-completeness gates) — a record of that tag, not a claim about the current tree <!-- count-gate:historical --> |
-| Test count on current main | **181 tests**, run in CI on every push. 180 pass locally; 1 gate runs only in CI. Machine-enforced by `tests/test_doc_counts.py`. Re-cut the tag to re-align it with the tree. |
+| Test count on current main | **181 tests**, run in CI on every push. 180 pass locally; 1 gate runs only in CI. Machine-enforced by `tests/test_doc_counts.py`. Tag `v0.10.0` was cut from this tree and matches this count. |
 | Validation dates | 2026-07-24 (P0-11 run · GA-4 run · Gate-B all-switches run · strict zero-PII canary run) |
 | Region validated | us-east-1 |
 | Deployment configuration validated | CDK `--all`; Gate-B run used `retention_profile=sandbox-demo kms=customer-managed network_mode=private identity_mode=pilot tenant=pha-la-county`; strict-canary run used the public profile |
