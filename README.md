@@ -35,7 +35,7 @@ the pharmacovigilance, benefits, and financial-aid agents, from a reusable, mani
 ## Production-grade build (P0 hardening — 2026-07)
 
 This repo is the portfolio's **lead agent** being taken to pilot-readiness under
-[`PRODUCTION-PLAN.md`](PRODUCTION-PLAN.md). The following are **built and offline-proven (161 tests
+[`PRODUCTION-PLAN.md`](PRODUCTION-PLAN.md). The following are **built and offline-proven (181 tests
 green)** — and the highest-stakes claims are also **live-proven with captured evidence**, including
 a full **Gate-B run with every hardening switch on** (see *Validated evidence* below) — closing the
 external deep-review's P0 findings:

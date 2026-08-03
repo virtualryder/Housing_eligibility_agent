@@ -6,17 +6,28 @@ import sys
 
 import pytest
 
+import governed_core
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "lib" / "controls"))
 os.environ.setdefault("PROVENANCE_SECRET", "p0-unit-provenance-secret")
 os.environ.setdefault("AUDIT_TABLE", "t")
 
+# finalize_signoff is CORE and now comes from the pinned governed-core package; signoff_register is a
+# DECLARED domain override that still lives in lib/controls (see tests/test_core_dependency.py).
+# Search the agent's own controls first, then the package — the same precedence the bundler uses.
+CORE_CONTROLS = pathlib.Path(governed_core.controls_dir())
+
 
 def _load(name):
-    spec = importlib.util.spec_from_file_location(name, ROOT / "lib" / "controls" / f"{name}.py")
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    return m
+    for base in (ROOT / "lib" / "controls", CORE_CONTROLS):
+        p = base / f"{name}.py"
+        if p.exists():
+            spec = importlib.util.spec_from_file_location(name, p)
+            m = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(m)
+            return m
+    raise FileNotFoundError(name)
 
 
 class _CondFail(Exception):

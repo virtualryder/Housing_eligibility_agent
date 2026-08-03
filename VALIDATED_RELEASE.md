@@ -17,7 +17,8 @@ release's clean-account validation run and MUST NOT be asserted before capture.*
 |---|---|
 | Tag | `v0.9.6` (immutable; 2026-07-24) — supersedes `v0.9.3`/`v0.9.2`. Single source of truth: the repo-root `RELEASE` file, enforced by `tests/test_release_consistency.py` (tag drift across docs fails CI) |
 | Commit SHA | the commit carrying tag `v0.9.6` (`git rev-list -n1 v0.9.6`) |
-| Test count at tag | **161** (134 offline + 24 CDK assertions + 3 CI-completeness gates), run in CI on every push. 160 pass locally; 1 gate runs only in CI. |
+| Test count at tag | **161 tests** at the moment `v0.9.6` was cut (134 offline + 24 CDK assertions + 3 CI-completeness gates) — a record of that tag, not a claim about the current tree <!-- count-gate:historical --> |
+| Test count on current main | **181 tests**, run in CI on every push. 180 pass locally; 1 gate runs only in CI. Machine-enforced by `tests/test_doc_counts.py`. Re-cut the tag to re-align it with the tree. |
 | Validation dates | 2026-07-24 (P0-11 run · GA-4 run · Gate-B all-switches run · strict zero-PII canary run) |
 | Region validated | us-east-1 |
 | Deployment configuration validated | CDK `--all`; Gate-B run used `retention_profile=sandbox-demo kms=customer-managed network_mode=private identity_mode=pilot tenant=pha-la-county`; strict-canary run used the public profile |
@@ -31,7 +32,7 @@ release's clean-account validation run and MUST NOT be asserted before capture.*
 
 | Check | Result |
 |---|---|
-| Offline test suite (`python -m pytest tests/ -q`) | **145 passed** (2026-07-24, incl. all live-run regression tests) — P0-1 sanitized-artifact matrix, P0-3 token-boundary + redaction, P0-2 workflow-controller guards, P0-3(prov) HUD provenance gate, audit-chain (+ adversarial transaction proofs), sign-off identity/SoD, exactly-once finalize, **GA-2 cross-domain key-forgery matrix**, **B5 tenant-isolation matrix**, **B4 canary + B6 load/replay verdict logic**, Cedar property tests + new-tool CI gate, CDK stack assertions incl. gateway-attachment, **network/KMS/identity Gate-B coverage**, golden evals |
+| Offline test suite (`python -m pytest tests/ -q`) | **145 passed at the time of this run** (2026-07-24, incl. all live-run regression tests) — P0-1 sanitized-artifact matrix, P0-3 token-boundary + redaction, P0-2 workflow-controller guards, P0-3(prov) HUD provenance gate, audit-chain (+ adversarial transaction proofs), sign-off identity/SoD, exactly-once finalize, **GA-2 cross-domain key-forgery matrix**, **B5 tenant-isolation matrix**, **B4 canary + B6 load/replay verdict logic**, Cedar property tests + new-tool CI gate, CDK stack assertions incl. gateway-attachment, **network/KMS/identity Gate-B coverage**, golden evals |
 | CDK synth + assertions (`tests/test_cdk_stacks.py`) | **passing** — templates synthesize; retention/IAM/state-machine assertions hold |
 | Security scans (ruff bug-classes, pip-audit, SBOM) | via `.github/workflows/ci.yml` on every push |
 
@@ -47,7 +48,7 @@ Full narrative + raw values: [`evidence/P0-11-VALIDATION-RUN.md`](evidence/P0-11
 | Deployment path | **CDK-synthesized templates** (data, compute, workflow, identity) via CloudFormation — all `CREATE_COMPLETE`; compute+workflow cleanly `UPDATE_COMPLETE`d mid-run |
 | P0-1 cloud proof | real Comprehend masking (`[REDACTED:NAME]/[SSN]/[ADDRESS]`); signed `sanitized_ref` minted + stored (`artifact_id e7fbca53…`, `authoritative:true, stored:true`); guard: genuine ref **ok:true**; forged sig / spoofed `deidentified:true` boolean / mutated content all **ok:false** |
 | P0-2 cloud proof | controller execution `p011-validation-2` → **SUCCEEDED**: Extract → GuardExtracted(ok) → Lookup(source down) → GuardAuthoritative(**ok:false**) → **ManualReview** — no determination on unverifiable data, enforced by the state machine |
-| Defect found + fixed by the run | `p011-validation-1` FAILED `States.Runtime` (brittle guard JSONPath on a source-down lookup) → guard now judges the whole lookup output; regression test added; suite **98/98** |
+| Defect found + fixed by the run | `p011-validation-1` FAILED `States.Runtime` (brittle guard JSONPath on a source-down lookup) → guard now judges the whole lookup output; regression test added; suite **98/98** at that point <!-- count-gate:historical --> |
 | Teardown | all 4 stacks `DELETE_COMPLETE`; RETAIN'd sandbox resources removed (audit table, WORM bucket, Cognito pool); deploy artifacts removed from the bootstrap bucket |
 | Residual-resource scan | **clean** — 0 `hou-val` stacks, 0 Lambdas, 0 DynamoDB tables, 0 state machines, 0 Cognito pools |
 
