@@ -15,8 +15,8 @@ release's clean-account validation run and MUST NOT be asserted before capture.*
 
 | Field | Value |
 |---|---|
-| Tag | `v0.9.6` (immutable; 2026-07-24) — supersedes `v0.9.3`/`v0.9.2`. Single source of truth: the repo-root `RELEASE` file, enforced by `tests/test_release_consistency.py` (tag drift across docs fails CI) |
-| Commit SHA | the commit carrying tag `v0.9.6` (`git rev-list -n1 v0.9.6`) |
+| Tag | `v0.11.0` (immutable; 2026-07-24) — supersedes `v0.9.3`/`v0.9.2`. Single source of truth: the repo-root `RELEASE` file, enforced by `tests/test_release_consistency.py` (tag drift across docs fails CI) **`v0.11.0` (2026-09-05) supersedes `v0.10.0 / v0.9.6`**: the same tree with `lib/` relocked at the pinned **governed-core 1.10.1** (fault-semantics batch — durable-evidence gating, un-strandable approvals, authoritative Cedar context — plus deepened PII/PHI detection); **offline-gated** (all pass locally except one CI-only gate; 187 collected). The last LIVE gate on this pack ran on the EP1 Gate-B run of 2026-07-24 (tag `v0.9.6`); `v0.10.0` (2026-09) carried the governed-core 1.10.0 re-pin offline; a live re-gate on 1.10.1 is the next milestone for this pack (third external review, REL-2). |
+| Commit SHA | the commit carrying tag `v0.11.0` (`git rev-list -n1 v0.11.0`) |
 | Test count at tag | **161 tests** at the moment `v0.9.6` was cut (134 offline + 24 CDK assertions + 3 CI-completeness gates) — a record of that tag, not a claim about the current tree <!-- count-gate:historical --> |
 | Test count on current main | **187 tests**, run in CI on every push. 180 pass locally; 1 gate runs only in CI. Machine-enforced by `tests/test_doc_counts.py`. Tag `v0.10.0` was cut from this tree and matches this count. |
 | Validation dates | 2026-07-24 (P0-11 run · GA-4 run · Gate-B all-switches run · strict zero-PII canary run) |
