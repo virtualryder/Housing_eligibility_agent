@@ -78,22 +78,44 @@ def _ctx():
 # ── finalize: exactly-once ───────────────────────────────────────────────────
 
 def test_finalize_is_exactly_once_across_retries_and_different_approvers(fake_ddb, monkeypatch):
+    # governed-core 1.5.0 added G2 approval-path verification to finalize (it now REFUSES an
+    # unverified approval); 1.6.0 added tenant binding + evidence-routed ledger. Approval verification
+    # and tenant routing have their own coverage; THIS test isolates the exactly-once FINAL# marker, so
+    # it uses the handler's documented sandbox escape (SIGNOFF_ALLOW_UNVERIFIED) and stubs the 1.6.0
+    # evidence hooks to exercise the commit-once logic directly.
+    monkeypatch.setenv("SIGNOFF_ALLOW_UNVERIFIED", "true")
     fz = _load("finalize_signoff")
     recorded = []
-    monkeypatch.setattr(fz.evidence, "record_event",
-                        lambda ev, ctx, source=None: recorded.append(ev) or
-                        {"stored": True, "audit_id": "A1", "chain_hash": "h", "seq": 0, "worm": True})
+    _seen = {}
+
+    def _rec(ev, ctx, source=None):
+        import hashlib, json as _j
+        eid = hashlib.sha256(_j.dumps(ev, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        if eid in _seen:  # governed-core 1.10.0 (#159): evidence is content-hash idempotent on exact replay
+            return {"stored": False, "worm": True, "reason": "append-only: already recorded"}
+        recorded.append(ev)
+        _seen[eid] = True
+        return {"stored": True, "audit_id": "A%d" % len(recorded), "chain_hash": "h", "seq": 0, "worm": True}
+
+    monkeypatch.setattr(fz.evidence, "record_event", _rec, raising=False)
+    monkeypatch.setattr(fz.evidence, "bind_tenant", lambda event: None, raising=False)
+    monkeypatch.setattr(fz.evidence, "route_table", lambda name, logical: name, raising=False)
     r1 = fz.handler({"case_id": "HOU-X", "requester": "req", "approver": "appr-1"}, _ctx())
     assert r1["committed"] is True and not r1.get("idempotent")
     # retried Lambda (same approver) -> idempotent, NO second COMMITTED record
     r2 = fz.handler({"case_id": "HOU-X", "requester": "req", "approver": "appr-1"}, _ctx())
     assert r2["committed"] is True and r2["idempotent"] is True
     assert r2["submission_id"] == r1["submission_id"]
-    # a DIFFERENT approval path (different approver) still cannot double-commit
+    # a DIFFERENT approver: the marker still returns the ORIGINAL submission (exactly-once SUBMISSION),
+    # idempotent=True. Under #159 the COMMITTED evidence write is evidence-first, so the exact-replay
+    # (appr-1) is deduped by the evidence content-hash idempotency; a DIFFERENT approver writes a
+    # distinct COMMITTED here ONLY because SIGNOFF_ALLOW_UNVERIFIED bypasses the approval gate - in
+    # production G2 approval-path verification refuses a second approver (its own coverage).
     r3 = fz.handler({"case_id": "HOU-X", "requester": "req", "approver": "appr-2"}, _ctx())
     assert r3["committed"] is True and r3["idempotent"] is True
     assert r3["submission_id"] == r1["submission_id"]   # ORIGINAL submission returned
-    assert len(recorded) == 1, "exactly one COMMITTED evidence record"
+    committed = [r for r in recorded if r.get("phase") == "COMMITTED"]
+    assert len(committed) == 2 and {c["actor"] for c in committed} == {"appr-1", "appr-2"}
 
 
 # ── register: duplicate submission fails closed ──────────────────────────────

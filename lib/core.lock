@@ -5,20 +5,19 @@
 # 'identical core' while the trees differed is how the exactly-once finalization gap hid for weeks.
 # The 'version' below means: derived from governed-core <version>. CROSS-repo parity is a separate
 # question answered by tools/check_core_parity.py. CI runs both and fails on either.
-version: 1.4.0
-files: 35
-tree_sha256: fc60407c6101425848237ef5d352626ce218aba2a587736add43d8a6b07fcadb
-78b591400c56b7b67b8cb3b2b8a8e65e9093897f02ce0878e6b5405c68620fa7  lib/CORE_VERSION
+version: 1.10.0
+files: 34
+tree_sha256: b053b7385b6dd734e4387f800a248770afbb2a618a3b6d0c0532ea95acb1b272
+4f5ba6a3e380bf810cc968b58d30a8d7163eafe9e2fb1ad19bdc6d9d64a1e549  lib/CORE_VERSION
 2490c78e8067798930870fcb6be5b99fb6316602f0e6958662970c6823cd4c2d  lib/connector/deploy_connector.sh
 56df0cb5464b5a5ca41766350382cdc63d9a6718fae69b08c73fd87724cd3e14  lib/connector/prove_connector.sh
 9b7968373ad47e2a6ceb7c83be44ba416c21117d4146470b38c00389a8864424  lib/connector/sor_api.py
 1824d2befc0b7aecc08e38ab94bd3f1b1d5577d416ead76a203ba082982109bb  lib/connector/verify_source.py
 b4fd5220d0b9ec11f4425aff9edf887236ce953f0a4ff81fe2e01be482f2494e  lib/controls/case_store.py
 b9f83094709479695a35b1cffa79642d3b5091485b97e5b2e28e911866998727  lib/controls/ingest_case.py
-36834f0e77c8a7385826e2ff31b92136bb8da4f298f13bcef159122bf14a48e8  lib/controls/mask_pii.py
+dcf75bc3c596b50cdd257b29ee527a10bbdbdb7eb42295af5e120b00c300f3b4  lib/controls/mask_pii.py
 ca61938d9d79b330050664974b5ae520114374c05ee2175385999fc0ce467173  lib/controls/provenance.py
 90acf221bd0dbd3764c1751439f6f5e800c332a7014aa0b9f0ef06ea8bc409a0  lib/controls/sanitized.py
-d6247cbdbbd25240699cfe300af1493ee0a588d61249345af29589507bb53fce  lib/controls/tenancy.py
 99508cbe29c37251c906d822785d2bd32c7a714fd8c3b318ac5b98f6822e4347  lib/controls/workflow_guards.py
 5ad9d89e330cf27c2730dc3b92651ea126865149c3903f360ff48873aa36f3e5  lib/engine/demo.sh
 f60450e6c96bc2722ded490e66ce6a6df7825d3a36f41e82b5173a8de557db17  lib/engine/deploy.sh
