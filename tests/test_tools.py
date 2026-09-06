@@ -79,3 +79,36 @@ def test_core_finalize_refused():
 
 def test_core_refer_fraud_refused():
     assert call("housing_core", {"fraud_case_id": "HOU-1"})["referred"] is False
+
+
+# -- L20 class: negation-aware elderly / disabled preference flags (2026-09-06) ---------------------
+# Found on benefits, where a negation-blind token match set categorical_eligibility from text
+# reading "no TANF". The same shape here decides which PREFERENCE CATEGORY a household is placed
+# in, so a negation-blind match assigns a household to a preference its application denies.
+
+NEGATED = [
+    ("Head of household is not disabled.", "disabled"),
+    ("Applicant is not elderly and not disabled.", "elderly"),
+    ("Applicant is not elderly and not disabled.", "disabled"),
+    ("Disability status: none", "disabled"),
+    ("SSDI was terminated in 2025.", "disabled"),
+]
+
+ASSERTED = [
+    ("Head of household is elderly (age 71).", "elderly"),
+    ("Applicant is disabled and receives SSDI.", "disabled"),
+    ("Not elderly. Applicant is disabled.", "disabled"),
+]
+
+
+def test_preference_flags_are_negation_aware():
+    """A preference the application denies must never be granted by a bare token match."""
+    for text, flag in NEGATED:
+        r = call("intake_application", {"application": "Household 2, annual income 24000, fips 06075. " + text})
+        assert r["fields"][flag] is False, (text, flag)
+
+
+def test_preference_flags_still_fire_when_actually_asserted():
+    for text, flag in ASSERTED:
+        r = call("intake_application", {"application": "Household 2, annual income 24000, fips 06075. " + text})
+        assert r["fields"][flag] is True, (text, flag)

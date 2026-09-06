@@ -1,6 +1,8 @@
 import json
 import re
 
+import negation
+
 # intake_application — extract the decision-relevant, NON-PII fields from a raw Housing Choice Voucher /
 # public-housing application (free text or JSON): household size, annual household income, county
 # FIPS/entityid, and elderly/disabled flags. Deterministic and fail-soft. PII (name, SSN, address, DOB)
@@ -51,12 +53,18 @@ def handler(event, context):
     if entityid is None:
         m = re.search(r"(?:entityid|county\s*fips|fips)[^0-9]{0,8}(\d{5,10})", low)
         entityid = m.group(1) if m else None
+    # L20 (live-found on benefits, 2026-09-06; same class here): these flags were NEGATION-BLIND.
+    # "Applicant is not disabled" matched `disabled` and granted the disabled preference, and
+    # "no longer elderly-designated" would have granted the elderly one. Both flags change the
+    # preference category a household is placed in, so a negation-blind match assigns a household
+    # to a preference the application explicitly denies. Shared implementation in
+    # lib/controls/negation.py; fail-closed, so an ambiguous mention never grants a preference.
     elderly = e.get("elderly")
     if elderly is None:
-        elderly = bool(re.search(r"\b(elderly|senior|age\s*6[2-9]|age\s*[7-9]\d)\b", low))
+        elderly = negation.asserted(low, r"\b(elderly|senior|age\s*6[2-9]|age\s*[7-9]\d)\b")
     disabled = e.get("disabled")
     if disabled is None:
-        disabled = bool(re.search(r"\b(disabled|disability|ssdi|ssi\s+disab)\b", low))
+        disabled = negation.asserted(low, r"\b(disabled|disability|ssdi|ssi\s+disab)\b")
 
     fields = {"household_size": hh, "annual_income": income, "entityid": entityid,
               "elderly": bool(elderly), "disabled": bool(disabled)}
