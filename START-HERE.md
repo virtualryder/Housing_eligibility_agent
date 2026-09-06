@@ -70,7 +70,7 @@ into the official case record) and is the dominant cost of any production phase.
 
 Gate A (synthetic-data pilot prerequisites): **complete, live-validated.** Gate B engineering
 (private networking, CMK, MFA identity, tenant pinning, zero-PII orchestration, key management,
-security metrics): **complete, live-validated.** Remaining before real applicant PII: **customer-side
+security metrics): **complete, live-validated (2026-07-24 run, governed-core 1.1.0 era).** The supported tag `v0.11.0` pins governed-core 1.10.1 **offline-gated only** — no AgentCore-era live gate has run on this pack yet (see README "Currency note"). Remaining before real applicant PII: a Housing live re-gate on 1.10.1, then **customer-side
 items** — IdP round-trip, governance signatures (PIA/retention/IR/access review/backup exercise),
 independent security testing, and the first independent deployment run. Production additionally
 requires system-of-record integration, multi-account evidence isolation, scale/failure testing, and

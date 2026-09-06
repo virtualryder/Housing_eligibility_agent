@@ -98,6 +98,8 @@ under [`evidence/`](evidence/):
 
 ### What is actually validated vs. what is not
 
+> **Currency note (2026-09-06).** Every ✅ below records the **2026-07-24 EP1 / Gate-B live run** (governed-core 1.1.0 era, tag `v0.9.6`). The supported tag `v0.11.0` (2026-09-05) pins governed-core **1.10.1** and is **offline-gated only**: the multi-tenant, kill-switch, budget, perimeter, guardrail and runtime controls inherited from governed-core 1.6–1.10 are **not live-proven on this pack**. The benefits pack is the live reference for those (`benefits_eligibility_agent/evidence/TIER1-REGATE-2026-09-06.md`); a Housing live re-gate on 1.10.1 is the open milestone (REL-2 / GAP-1).
+
 | Claim | Status |
 |---|---|
 | CDK deployment path incl. AgentCore Gateway/Cedar as IaC | ✅ live-validated (2×), captured evidence |
