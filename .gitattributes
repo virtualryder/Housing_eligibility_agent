@@ -1,0 +1,47 @@
+# DEFAULT (2026-09-08, L60). Everything git detects as text is LF in the repository.
+# This line must stay FIRST: .gitattributes is last-match-wins, so the explicit `binary`
+# declarations below still override it for Office files, images and archives.
+#
+# This replaced an extension ENUMERATION. The enumeration was green and inert: it listed
+# .sh/.py/.yml/.json/.toml/.md and therefore silently allowed CRLF into policies/*.cedar
+# (the input to the POLICY_VERSION provenance digest), tools/hooks/pre-commit (a bash
+# script), lib/CORE_VERSION (hashed by lib/core.lock) and RELEASE. A verifier cloning on
+# Windows with stock Git (core.autocrlf=true) would compute different digests than we do
+# and fail verification for a reason unrelated to any control.
+* text=auto eol=lf
+
+# Office documents — ZIP archives. CRLF<->LF rewriting inside them strips embedded media
+# and can make the file unopenable. `binary` = `-text -diff`.
+*.pptx  binary
+*.ppt   binary
+*.docx  binary
+*.doc   binary
+*.xlsx  binary
+*.xls   binary
+
+# PDFs and raster images
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+
+# Archives and fonts
+*.zip   binary
+*.gz    binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+
+# Text formats we want diffable, pinned to LF explicitly for readers of this file.
+*.sh     text eol=lf
+*.py     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.json   text eol=lf
+*.toml   text eol=lf
+*.md     text eol=lf
+*.cedar  text eol=lf
+*.svg    text eol=lf
+*.drawio text eol=lf
