@@ -1,11 +1,30 @@
 #!/usr/bin/env python3
 """Post-deployment validation (GA-7) — emits the machine-readable PASS/FAIL verdict.
 Read-only except three probe invocations (mask + guard + one fail-closed workflow execution)."""
-import argparse, json, subprocess, sys, time
+import argparse, json, os, subprocess, sys, tempfile, time
 
 def aws(*args):
     r = subprocess.run(["aws", *args], capture_output=True, text=True)
     return r.returncode, (r.stdout or r.stderr).strip()
+
+
+# B108: these probe payloads used fixed /tmp names (_m.json, _g.json, ...). On a shared host that
+# is a predictable path another user can pre-create or symlink, and the AWS CLI writes its response
+# there too. A per-run 0700 directory removes the class rather than suppressing the finding, and the
+# paths stay stable within a run because the CLI needs file:// URIs for them.
+_SCRATCH = tempfile.mkdtemp(prefix="aegis-validate-")
+
+
+def _t(name):
+    """Absolute path inside this run's private scratch directory."""
+    return os.path.join(_SCRATCH, name)
+
+
+def _furi(name):
+    """The same path as a file:// URI, which is what `aws lambda invoke --payload` expects."""
+    return "file://" + _t(name).replace(os.sep, "/")
+
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -27,36 +46,36 @@ def main():
     out["secrets"] = "PRESENT" if rc1 == 0 and rc2 == 0 else "FAIL"
     # masking control probe: mask -> genuine ref ok; forged ref denied
     payload = json.dumps({"case": "Probe Person, SSN 123-45-6789, household of 4, income 40000, county entityid 0603799999"})
-    open("/tmp/_m.json", "w").write(payload)
+    open(_t("_m.json"), "w").write(payload)
     rc, _ = aws("lambda", "invoke", "--function-name", f"{p}-mask-pii", "--region", a.region,
-                "--cli-binary-format", "raw-in-base64-out", "--payload", f"file:///tmp/_m.json", "/tmp/_mo.json")
-    mask = json.load(open("/tmp/_mo.json")) if rc == 0 else {}
+                "--cli-binary-format", "raw-in-base64-out", "--payload", _furi("_m.json"), _t("_mo.json"))
+    mask = json.load(open(_t("_mo.json"))) if rc == 0 else {}
     ok_mask = mask.get("deidentified") is True and "123-45-6789" not in json.dumps(mask.get("masked_case", "")) \
               and (mask.get("sanitized_ref") or {}).get("authoritative") is True
     out["masking_control"] = "PASS" if ok_mask else "FAIL"
     for name, ref, want in (("guard_genuine", mask.get("sanitized_ref"), True),
                             ("forged_ref_denied", dict(mask.get("sanitized_ref") or {}, sig="deadbeef"*8), False)):
-        open("/tmp/_g.json", "w").write(json.dumps({"guard": "deidentified", "sanitized_ref": ref}))
+        open(_t("_g.json"), "w").write(json.dumps({"guard": "deidentified", "sanitized_ref": ref}))
         rc, _ = aws("lambda", "invoke", "--function-name", f"{p}-workflow-guards", "--region", a.region,
-                    "--cli-binary-format", "raw-in-base64-out", "--payload", "file:///tmp/_g.json", "/tmp/_go.json")
-        g = json.load(open("/tmp/_go.json")) if rc == 0 else {}
+                    "--cli-binary-format", "raw-in-base64-out", "--payload", _furi("_g.json"), _t("_go.json"))
+        g = json.load(open(_t("_go.json"))) if rc == 0 else {}
         out[name] = "PASS" if g.get("ok") is want else "FAIL"
     # workflow fail-closed probe (no HUD token -> ManualReview) or happy path if token present.
     # R3-2 pass-by-reference: raw content enters ONLY via ingest-case; the execution starts with
     # {case_id, requester, case_ref} — inline application text is no longer a valid input.
-    open("/tmp/_i.json", "w").write(json.dumps(
+    open(_t("_i.json"), "w").write(json.dumps(
         {"application": "Household of 4. Annual household income: 40000. County entityid 0603799999.",
          "case_id": f"VAL-{int(time.time())}"}))
     rc, _ = aws("lambda", "invoke", "--function-name", f"{p}-ingest-case", "--region", a.region,
-                "--cli-binary-format", "raw-in-base64-out", "--payload", "file:///tmp/_i.json", "/tmp/_io.json")
-    ing = json.load(open("/tmp/_io.json")) if rc == 0 else {}
+                "--cli-binary-format", "raw-in-base64-out", "--payload", _furi("_i.json"), _t("_io.json"))
+    ing = json.load(open(_t("_io.json"))) if rc == 0 else {}
     out["ingest_pass_by_reference"] = "PASS" if ing.get("ingested") and str(ing.get("case_ref", "")).startswith("case-") else "FAIL"
-    open("/tmp/_w.json", "w").write(json.dumps({"case_id": ing.get("case_id", "VAL"), "requester": "validator",
+    open(_t("_w.json"), "w").write(json.dumps({"case_id": ing.get("case_id", "VAL"), "requester": "validator",
                                                 "case_ref": ing.get("case_ref", "")}))
     rc, arn = aws("stepfunctions", "start-execution", "--region", a.region,
                   "--state-machine-arn", f"arn:aws:states:{a.region}:{{ACCT}}:stateMachine:{p}-determination-workflow"
                   .replace("{ACCT}", aws("sts", "get-caller-identity", "--query", "Account", "--output", "text")[1]),
-                  "--input", "file:///tmp/_w.json", "--query", "executionArn", "--output", "text")
+                  "--input", _furi("_w.json"), "--query", "executionArn", "--output", "text")
     verdict = "FAIL"
     if rc == 0:
         for _ in range(20):

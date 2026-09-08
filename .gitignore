@@ -35,3 +35,11 @@ __pycache__/
 # Local secrets - never commit
 .hud-token.env
 *.secret.env
+
+# CDK synth output under any suffix. `cdk/cdk.out/` alone missed the per-run
+# directories the gate harness creates (cdk.out-5668, cdk.out-packcheck, ...),
+# and `cdk/outputs-*.json` carries the live account id in stack outputs.
+cdk.out/
+cdk/cdk.out-*/
+cdk.out-*/
+cdk/outputs-*.json

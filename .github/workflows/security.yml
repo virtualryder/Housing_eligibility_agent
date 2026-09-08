@@ -1,0 +1,149 @@
+name: Security
+
+# SEC-1 (fourth external review R4-13, "security pipeline coverage is inconsistent"): every pack now
+# runs the SAME five gates, and every one of them is BLOCKING. Before this, the packs ran only
+# pip-audit + SBOM, while the platform repo alone ran static analysis, secret detection and IaC
+# scanning - so a finding could land in a pack and never be seen.
+#
+#   1. static analysis  - bandit (Python security linter), HARD FAIL on medium+/medium+.
+#   2. secret detection - detect-secrets against a REVIEWED committed .secrets.baseline; any string
+#                         that is not already in the baseline fails the build.
+#   3. IaC scanning     - checkov over the SYNTHESIZED CloudFormation (not the CDK source, which it
+#                         cannot see through), against a committed .checkov.baseline; new findings fail.
+#   4. code scanning    - CodeQL (security-extended) for the query classes bandit does not cover.
+#   5. container scan   - trivy on the AgentCore Runtime image actually built from lib/runtime, HIGH
+#                         and CRITICAL fail. The runtime image is the one artifact that reaches
+#                         production without going through pip-audit's requirements view.
+#
+# Nothing here is report-only. A gate that cannot fail the build is documentation, not a control.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly re-run: advisories land after a commit does, so a repo with no pushes still gets scanned.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  static-analysis:
+    name: bandit · secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install scanners (pinned)
+        run: python -m pip install --quiet "bandit==1.9.4" "detect-secrets==1.5.0"
+
+      # B101 (assert) is skipped: the test suite and the CDK assertions are assert-based by design.
+      - name: Static analysis (bandit) - BLOCKING
+        run: bandit -r agents lib cdk scripts tools -ll -ii --skip B101
+
+      - name: Secret detection (detect-secrets) - BLOCKING against the reviewed baseline
+        run: |
+          cp .secrets.baseline "$RUNNER_TEMP/baseline.committed.json"
+          detect-secrets scan --baseline .secrets.baseline
+          # NOT `git diff --exit-code`: detect-secrets rewrites generated_at with the current time
+          # on every scan, so that comparison always reported "new potential secret(s)" and the
+          # BLOCKING step could never pass, on any tree. Compare the findings instead.
+          python tools/check_secrets_baseline.py "$RUNNER_TEMP/baseline.committed.json" .secrets.baseline
+
+  iac-scan:
+    name: checkov (synthesized CloudFormation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The CDK app imports governed_core; without the pinned core `cdk synth` dies with
+      # ModuleNotFoundError and the IaC gate never scans a single template. It failed that way
+      # silently-enough that "checkov configured" read as "IaC scanned".
+      - name: Install the PINNED governance core (hash-verified)
+        run: python -m pip install --require-hashes -r requirements-core.txt
+
+      - name: Install CDK + checkov (pinned)
+        run: |
+          python -m pip install --quiet -r cdk/requirements.txt "checkov==3.2.489"
+          npm install --no-save aws-cdk@2
+
+      # checkov reads CloudFormation, not CDK Python - so the app must be synthesized first or the
+      # scan silently passes over an empty tree. The default profile is the one a pilot deploys.
+      - name: Synthesize
+        working-directory: cdk
+        run: npx cdk synth --quiet
+
+      - name: IaC scan - BLOCKING against the committed baseline
+        working-directory: cdk
+        run: |
+          python -m checkov.main -d cdk.out --framework cloudformation \
+            --baseline ../.checkov.baseline --compact --quiet
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@v3
+
+  container-scan:
+    name: trivy (AgentCore Runtime image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runtime image is what AgentCore actually runs. pip-audit sees requirements.txt; only an
+      # image scan sees the base image's OS packages, which is where most CRITICALs live.
+      # A digest pin freezes the OS packages too, so it accrues every advisory published after it
+      # was resolved. Nothing was measuring that, and trivy found 30 fixable HIGH/CRITICAL in a base
+      # pinned two months earlier. This prints the digest the tag resolves to NOW, so a base bump is
+      # a copy-paste from a trusted runner rather than a guess - and it appears in the log of every
+      # run, which is where someone will actually see it.
+      - name: Report the current upstream digest for the pinned base
+        run: |
+          echo "pinned in lib/runtime/Dockerfile:"
+          grep -oE 'sha256:[0-9a-f]{64}' lib/runtime/Dockerfile
+          echo "python:3.12-slim resolves TODAY to:"
+          docker manifest inspect public.ecr.aws/docker/library/python:3.12-slim \
+            | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('digest') or '(index - see manifests below)')" || true
+          docker buildx imagetools inspect public.ecr.aws/docker/library/python:3.12-slim \
+            | head -3 || true
+
+      - name: Build the runtime image
+        run: docker build -t aegis-runtime:ci lib/runtime
+
+      - name: Scan the runtime image - BLOCKING on HIGH/CRITICAL
+        # Pinned to the COMMIT the v0.36.0 tag resolves to, not the tag: a tag can be moved, a
+        # third-party action runs with repo credentials, and the previous pin (@0.28.0) did not
+        # exist at all - this action's tags are v-prefixed - so the container scan had been
+        # failing at "Set up job" with "unable to find version" and had never scanned an image.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: aegis-runtime:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL

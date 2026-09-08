@@ -101,7 +101,15 @@ def test_offline_count_in_docs_matches_the_suite():
                 # "at the time of this run" or an inline `<!-- count-gate:historical -->` marker -
                 # so this can never become a blanket excuse for a stale number.
                 context = lines[line - 1] if line - 1 < len(lines) else ""
-                if "at the time of this run" in context or "count-gate:historical" in context:
+                # "at the time of this run" scopes the WHOLE line (it is a past-run record).
+                # The inline marker scopes ONE number: it must sit within 40 chars AFTER that
+                # number. Line-scoping the marker was the drift: a line that records a historical
+                # count AND the current one - "the suite is 395 tests; v0.3.0 stood at 154
+                # <!-- count-gate:historical -->" - had BOTH numbers exempted, so the current
+                # count could rot behind a green gate. Ported from the benefits pack (2026-09-06).
+                if "at the time of this run" in context:
+                    continue
+                if "count-gate:historical" in text[m.end(): m.end() + 40]:
                     continue
                 problems.append(f"{rel}:{line} quotes {n}, suite has {actual}")
     assert not problems, (

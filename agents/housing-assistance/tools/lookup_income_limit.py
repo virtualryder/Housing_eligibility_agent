@@ -33,6 +33,21 @@ import provenance  # shared signer (bundled beside this handler at deploy; on sy
 # token, the downstream determination correctly becomes NEEDS_REVIEW instead of a fabricated answer.
 
 API_BASE = "https://www.huduser.gov/hudapi/public/il/data"
+def _require_https(url):
+    """B310: refuse anything that is not https before opening it.
+
+    Bandit's warning is real, not noise: these URLs come from configuration (SOR_URL, a JWKS
+    endpoint, a CloudFormation ResponseURL). urlopen honours file:// and custom schemes, so a
+    config value an attacker can influence turns a fetch into local-file disclosure. Validate the
+    scheme and fail closed; the nosec on the urlopen below points at THIS check, it does not wave
+    the finding away.
+    """
+    scheme = urllib.parse.urlsplit(url).scheme
+    if scheme != "https":
+        raise ValueError("refusing non-https URL scheme %r" % (scheme or "<none>"))
+    return url
+
+
 def _resolve_token():
     """HUD bearer token: env (dev) or AWS Secrets Manager via HUD_API_TOKEN_ARN (production path,
     Review-2 — never a plaintext Lambda env value). Fail-closed: no token -> found:false -> review."""
@@ -79,7 +94,8 @@ def _query(entityid, year):
         "Authorization": "Bearer " + API_TOKEN,
         "User-Agent": "governed-housing-agent/1.0",
     })
-    with urllib.request.urlopen(req, timeout=8) as r:
+    _require_https(url)
+    with urllib.request.urlopen(req, timeout=8) as r:  # nosec B310 - scheme checked above
         return json.loads(r.read().decode("utf-8"))
 
 
