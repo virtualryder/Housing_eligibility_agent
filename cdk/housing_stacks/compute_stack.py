@@ -5,10 +5,65 @@ IAM is explicit and minimal per function: the audit writer can only PutItem the 
 vault (with an explicit Deny on mutation/bypass); mask_pii can only Comprehend-detect + write the
 sanitized store; the assessor/guards only read the sanitized store; the drafter only invokes Bedrock.
 Exact ARNs are exported — nothing downstream discovers by name (P0-7)."""
+import hashlib
+import pathlib
+
 import aws_cdk as cdk
 from aws_cdk import (aws_ec2 as ec2, aws_iam as iam, aws_kms as kms, aws_lambda as lambda_,
                      aws_logs as logs, aws_secretsmanager as sm)
 from constructs import Construct
+
+# ---- #232: policy provenance in every audit record -----------------------------------------------
+# governed_core.controls.evidence writes `policy_version`, `rule_version` and `deployment_version`
+# into the hashed logical record of EVERY audit row, reading them from the environment and
+# defaulting to the string "unset". Nothing in this CDK app set them, so every row written by a
+# CDK-deployed Lambda recorded:
+#
+#     "policy_version": "unset", "rule_version": "unset"
+#
+# which is exactly what the 2026-09-02 111-gate evidence contains. The legacy shell path
+# (lib/engine/deploy.sh) set the literal "v1" - a placeholder, not provenance: it does not change
+# when the policies change, so it cannot answer the question the field exists for.
+#
+# That question is "which policy set decided this case?", and the only honest answer is derived from
+# the artefacts actually deployed. These digests are CONTENT-ADDRESSED: they change exactly when the
+# Cedar policies or the agent manifest change, and not otherwise.
+def _digest_of(paths, label):
+    """Stable short digest over a set of files, sorted by name.
+
+    Content, not mtime; the filename is hashed too, so adding or renaming a policy changes the
+    digest even when the bytes elsewhere are identical. Newlines are normalised so a CRLF checkout
+    and an LF checkout of the same tree produce the SAME provenance - a version string that depends
+    on which machine ran `cdk synth` is not provenance either.
+    """
+    h = hashlib.sha256()
+    for p in sorted(paths, key=lambda q: q.name):
+        h.update(p.name.encode("utf-8"))
+        h.update(b"\0")
+        h.update(p.read_bytes().replace(b"\r\n", b"\n"))
+        h.update(b"\0")
+    return "%s-%s" % (label, h.hexdigest()[:12])
+
+
+def provenance_env(repo_root):
+    """POLICY_VERSION / RULE_VERSION / DEPLOYMENT_VERSION for the tree being synthesized."""
+    root = pathlib.Path(repo_root)
+    cedar = sorted((root / "policies").glob("*.cedar"))
+    manifests = sorted((root / "agents").glob("*/manifest.yaml"))
+    try:
+        release = (root / "RELEASE").read_text(encoding="utf-8").strip()
+    except OSError:
+        release = ""
+    return {
+        # The Cedar policy set the deployed engine authorizes against.
+        "POLICY_VERSION": _digest_of(cedar, "cedar") if cedar else "no-policies",
+        # The agent manifest: tool list, entitlements, guardrail and model pins - the rules the
+        # workflow runs under that are not Cedar.
+        "RULE_VERSION": _digest_of(manifests, "manifest") if manifests else "no-manifest",
+        # The release this tree claims to be. An untagged working tree says so rather than "v1".
+        "DEPLOYMENT_VERSION": release or "untagged-working-tree",
+    }
+
 
 RUNTIME = lambda_.Runtime.PYTHON_3_12
 
@@ -29,6 +84,9 @@ class ComputeStack(cdk.Stack):
         if getattr(data, "cmk", None) is not None:
             cmk = kms.Key.from_key_arn(self, "DataCmk", data.cmk.key_arn)
         common_env = {
+            # #232: content-addressed policy provenance, so every audit row can name the
+            # Cedar set and manifest that were actually deployed instead of "unset".
+            **provenance_env(pathlib.Path(__file__).resolve().parents[2]),
             "AUDIT_TABLE": data.audit_table.table_name,
             "WORM_BUCKET": data.worm_bucket.bucket_name,
             "SANITIZED_TABLE": data.sanitized_table.table_name,
