@@ -35,7 +35,7 @@ the pharmacovigilance, benefits, and financial-aid agents, from a reusable, mani
 ## Production-grade build (P0 hardening — 2026-07)
 
 This repo is the portfolio's **lead agent** being taken to pilot-readiness under
-[`PRODUCTION-PLAN.md`](PRODUCTION-PLAN.md). The following are **built and offline-proven (208 tests
+[`PRODUCTION-PLAN.md`](PRODUCTION-PLAN.md). The following are **built and offline-proven (209 tests
 green)** — and the highest-stakes claims are also **live-proven with captured evidence**, including
 a full **Gate-B run with every hardening switch on** (see *Validated evidence* below) — closing the
 external deep-review's P0 findings:
@@ -98,7 +98,7 @@ under [`evidence/`](evidence/):
 
 ### What is actually validated vs. what is not
 
-> **Currency note (2026-09-06).** Every ✅ below records the **2026-07-24 EP1 / Gate-B live run** (governed-core 1.1.0 era, tag `v0.9.6`). The supported tag `v0.11.0` (2026-09-05) pins governed-core **1.10.1** and is **offline-gated only**: the multi-tenant, kill-switch, budget, perimeter, guardrail and runtime controls inherited from governed-core 1.6–1.10 are **not live-proven on this pack**. The benefits pack is the live reference for those (`benefits_eligibility_agent/evidence/TIER1-REGATE-2026-09-06.md`); a Housing live re-gate on 1.10.1 is the open milestone (REL-2 / GAP-1).
+> **Currency note (2026-09-06).** Every ✅ below records the **2026-07-24 EP1 / Gate-B live run** (governed-core 1.1.0 <!-- count-gate:historical --> era, tag `v0.9.6`). The supported tag `v0.11.0` (2026-09-05) pins governed-core **1.10.1** <!-- count-gate:historical --> and is **offline-gated only** (main has since moved to **1.11.1**, so the tag is behind this tree): the multi-tenant, kill-switch, budget, perimeter, guardrail and runtime controls inherited from governed-core 1.6–1.10 are **not live-proven on this pack**. The benefits pack is the live reference for those (`benefits_eligibility_agent/evidence/TIER1-REGATE-2026-09-06.md`); a Housing live re-gate on 1.11.1 is the open milestone (REL-2 / GAP-1).
 
 | Claim | Status |
 |---|---|
@@ -288,7 +288,7 @@ Apache-2.0 — see [LICENSE](LICENSE).
 
 ## Governed-core dependency currency (2026-09-05)
 
-This pack pins **governed-core 1.10.1** (`requirements-core.txt`, `--require-hashes`), inheriting the
+This pack pins **governed-core 1.11.1** (`requirements-core.txt`, `--require-hashes`), inheriting the
 fault-semantics batch from the external-review response: a consequential commit requires the hash-chained
 ledger write AND the S3 Object-Lock WORM copy (`evidence.is_durable`, WORM repaired on replay);
 `request_signoff` / `approve_signoff` are fail-closed and un-strandable (durable evidence before any
