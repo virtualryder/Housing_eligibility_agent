@@ -102,4 +102,4 @@ const body = [
 ];
 
 const doc = makeDoc(cover, body, "Housing Eligibility AgentCore · Maintenance & Operations Guide");
-Packer.toBuffer(doc).then((b) => { require("fs").writeFileSync("Housing-AgentCore-Maintenance.docx", b); console.log("wrote maintenance"); });
+Packer.toBuffer(doc).then((b) => { require("fs").writeFileSync(require("path").join(__dirname, "..", "Housing-AgentCore-Maintenance.docx"), b); console.log("wrote maintenance"); });
