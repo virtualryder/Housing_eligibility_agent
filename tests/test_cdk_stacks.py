@@ -387,10 +387,10 @@ def test_attachment_covers_every_manifest_tool_and_enforce():
         for tool in t["tools"]:
             assert "access_token" not in tool["inputSchema"]["properties"]
     policies = _tokjson(props["PoliciesJson"])
-    assert {p["name"] for p in policies} == {
+    assert {p["name"].split("hou_gw_", 1)[-1] for p in policies} == {
         "housing_specialist_permit", "mask_before_assess", "mask_before_recertify",
         "mask_before_overpayment", "mask_before_draft", "no_self_commit", "no_self_fraud_referral"}
-    assert all("__GATEWAY_ARN__" in p["definition"] for p in policies if p["name"].startswith("no_self"))
+    assert all("__GATEWAY_ARN__" in p["definition"] for p in policies if p["name"].startswith("hou_gw_no_self"))
     assert props["Enforcement"] == "ENFORCE"
     authz = props["AuthorizerConfigJson"]
     authz_s = authz if isinstance(authz, str) else "".join(
