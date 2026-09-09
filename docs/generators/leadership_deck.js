@@ -218,7 +218,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   const s = p.addSlide(); bg(s, CLOUD);
   eyebrow(s, "Evidence");
   title(s, "Proof, not slideware: validated live on AWS, evidence captured");
-  const stats = [["219/219", "automated tests green", MINT], ["3", "clean-account live validation runs captured", TEAL], ["10", "real defects found & fixed by validation", AMBER], ["0", "residual on teardown", NAVY]];
+  const stats = [["238/238", "automated tests green", MINT], ["3", "clean-account live validation runs captured", TEAL], ["10", "real defects found & fixed by validation", AMBER], ["0", "residual on teardown", NAVY]];
   const sw = 2.9, gap = 0.23, x0 = 0.62, y = 1.5;
   stats.forEach((st, i) => {
     const x = x0 + i * (sw + gap);
@@ -382,4 +382,8 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   s.addNotes("Close on the multiplier: one pattern, four verticals proven, two in SLG. The ask is a three-step path from internal demo to a scoped, synthetic-data pilot with a housing authority.");
 })();
 
-p.writeFile({ fileName: "Housing-AgentCore-Leadership.pptx" }).then((f) => console.log("wrote", f));
+// L67: this wrote the deck to the PROCESS working directory, so running the generator from
+// docs/generators/ left the .pptx beside the generator and the tracked deck in docs/ untouched -
+// the same defect already fixed in the .docx generators. A deck that is never rewritten is a deck
+// whose numbers are whatever they were the day someone last ran this from the right folder.
+p.writeFile({ fileName: require("path").join(__dirname, "..", "Housing-AgentCore-Leadership.pptx") }).then((f) => console.log("wrote", f));

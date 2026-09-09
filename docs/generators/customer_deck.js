@@ -175,7 +175,7 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   const s = p.addSlide(); bg(s, CLOUD);
   eyebrow(s, "Where it stands today");
   title(s, "Proven end-to-end on AWS — not a slideware demo");
-  const stats = [["219/219", "automated tests green in CI", MINT], ["End-to-end", "proven live - including fully network-isolated", TEAL], ["100%", "of determinations gated by a specialist", AMBER]];
+  const stats = [["238/238", "automated tests green in CI", MINT], ["End-to-end", "proven live - including fully network-isolated", TEAL], ["100%", "of determinations gated by a specialist", AMBER]];
   const sw = 3.9, gap = 0.2, x0 = 0.62, y = 1.55;
   stats.forEach((st, i) => {
     const x = x0 + i * (sw + gap);
@@ -276,4 +276,8 @@ function circle(s, x, y, d, fill, txt, txtColor = WHITE, fs = 16) {
   s.addNotes("Close on a concrete, low-commitment path: synthetic-data, in-their-account, reversible — an easy yes for a privacy-conscious housing authority.");
 })();
 
-p.writeFile({ fileName: "Housing-AgentCore-Customer.pptx" }).then((f) => console.log("wrote", f));
+// L67: this wrote the deck to the PROCESS working directory, so running the generator from
+// docs/generators/ left the .pptx beside the generator and the tracked deck in docs/ untouched -
+// the same defect already fixed in the .docx generators. A deck that is never rewritten is a deck
+// whose numbers are whatever they were the day someone last ran this from the right folder.
+p.writeFile({ fileName: require("path").join(__dirname, "..", "Housing-AgentCore-Customer.pptx") }).then((f) => console.log("wrote", f));
